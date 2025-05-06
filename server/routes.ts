@@ -137,9 +137,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Only return the updated chat, not separate messages
       return res.status(201).json({ 
         success: true, 
-        messages: [userMessage, assistantMessage],
         chat: await storage.getChatById(chatId)
       });
     } catch (error) {
