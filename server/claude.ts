@@ -523,6 +523,8 @@ Format the prompt as a clear, well-structured implementation request that could 
   // Phase 3: AI Opportunity Suggestions with Web Search
   public static async suggestAiOpportunities(chatId: string): Promise<string> {
     try {
+      console.log(`Starting AI opportunity suggestion generation for chat ${chatId}`);
+      
       // Get chat data
       const chat = await storage.getChatById(chatId);
       
@@ -530,17 +532,19 @@ Format the prompt as a clear, well-structured implementation request that could 
         throw new Error('No workflow data found for this chat');
       }
       
-      // Create the web search tool definition
+      console.log(`Retrieved workflow JSON for chat ${chatId}`);
+      
+      // Define the web search tool schema according to Anthropic's specifications
       const tools = [
         {
           name: "web_search",
           description: "Search the web for AI implementation case studies, best practices, and industry research",
           input_schema: {
-            type: "object",
+            type: "object" as const,
             properties: {
               query: {
-                type: "string",
-                description: "The search query"
+                type: "string" as const,
+                description: "The search query to find information about AI implementations and industry best practices"
               }
             },
             required: ["query"]
@@ -548,111 +552,231 @@ Format the prompt as a clear, well-structured implementation request that could 
         }
       ];
       
+      console.log(`Sending initial request to Claude for AI opportunity identification`);
+      
       // First message setting up the context and the need to use the search tool
+      const initialPrompt = `Please analyze this workflow JSON to identify AI implementation opportunities. Use the web_search tool to find current industry examples and best practices for similar workflows.\n\n${JSON.stringify(chat.workflow_json, null, 2)}`;
+      
+      // Create the initial message to Claude with proper tool configuration
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
         max_tokens: 4000,
         temperature: 0.7,
         system: this.AI_OPPORTUNITIES_SYSTEM,
-        messages: [
-          { 
-            role: 'user', 
-            content: `Please analyze this workflow JSON to identify AI implementation opportunities. Use the web_search tool to find current industry examples and best practices for similar workflows.\n\n${JSON.stringify(chat.workflow_json, null, 2)}` 
-          }
-        ],
+        messages: [{ role: 'user', content: initialPrompt }],
         tools,
         tool_choice: { type: "auto" }
       });
       
-      // Process the first response and handle tool calls
-      let finalResponse = response;
-      let needsMoreSearches = true;
-      let toolCallCount = 0;
-      const maxToolCalls = 5; // Limit the number of search calls
+      console.log(`Received initial response from Claude`);
       
-      // The conversation history to build upon
-      let conversation = [
-        { 
-          role: 'user' as const, 
-          content: `Please analyze this workflow JSON to identify AI implementation opportunities. Use the web_search tool to find current industry examples and best practices for similar workflows.\n\n${JSON.stringify(chat.workflow_json, null, 2)}` 
-        },
+      // Process the conversation with tool calls
+      let finalResponse = response;
+      let needsMoreSearches = false;
+      let toolCallCount = 0;
+      const maxToolCalls = 5; // Limit the number of search calls to prevent excess usage
+      
+      // Initialize conversation history
+      // TypeScript interfaces for message types
+      type UserMessage = { role: 'user', content: string };
+      type AssistantMessage = typeof response;
+      type ToolMessage = { role: 'tool', tool_call_id: string, name: string, content: string };
+      
+      // Create a type-safe conversation array
+      let conversation: (UserMessage | AssistantMessage | ToolMessage)[] = [
+        { role: 'user', content: initialPrompt },
         response
       ];
       
-      // Keep processing tool calls until the model is satisfied or we reach the max calls
+      // Check if there are any tool calls in the initial response
+      if (response.content && Array.isArray(response.content)) {
+        // Look for tool_use blocks in the content
+        const hasToolUse = response.content.some(block => 
+          typeof block === 'object' && 
+          block !== null && 
+          'type' in block && 
+          block.type === 'tool_use'
+        );
+        
+        needsMoreSearches = hasToolUse;
+      }
+      
+      console.log(`Initial response has tool calls: ${needsMoreSearches}`);
+      
+      // Handle tool calls in a loop until we get a final answer or reach max calls
       while (needsMoreSearches && toolCallCount < maxToolCalls) {
-        // Check if the last response contains tool calls
+        console.log(`Processing tool calls, iteration ${toolCallCount + 1}`);
+        
+        // Get the most recent response
         const lastMessage = conversation[conversation.length - 1];
         
-        if (lastMessage.role === 'assistant' && lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-          // Process each tool call
-          const toolResponses = [];
+        // Check if it's an assistant message with tool calls
+        if ('role' in lastMessage && lastMessage.role === 'assistant' && lastMessage.content) {
+          // Look for tool_use blocks in the content
+          const toolUseBlocks = lastMessage.content.filter(block => 
+            typeof block === 'object' && 
+            block !== null && 
+            'type' in block && 
+            block.type === 'tool_use'
+          );
           
-          for (const toolCall of lastMessage.tool_calls) {
-            if (toolCall.name === 'web_search') {
-              toolCallCount++;
-              
-              try {
-                // Extract the search query
-                const input = JSON.parse(toolCall.input);
-                const query = input.query;
+          if (toolUseBlocks.length > 0) {
+            // Process each tool call
+            const toolResponses: ToolMessage[] = [];
+            
+            for (const block of toolUseBlocks) {
+              if ('type' in block && block.type === 'tool_use' && 'id' in block && 'name' in block && 'input' in block) {
+                toolCallCount++;
+                console.log(`Processing tool call ${toolCallCount}: ${block.name}`);
                 
-                // Perform the web search
-                const searchResults = await webSearch.search(query);
-                
-                // Add the tool response to the list
-                toolResponses.push({
-                  tool_call_id: toolCall.id,
-                  role: 'tool' as const,
-                  name: 'web_search',
-                  content: JSON.stringify(searchResults)
-                });
-                
-              } catch (error) {
-                console.error('Error processing web search:', error);
-                toolResponses.push({
-                  tool_call_id: toolCall.id,
-                  role: 'tool' as const,
-                  name: 'web_search',
-                  content: JSON.stringify({ results: [] })
-                });
+                if (block.name === 'web_search') {
+                  try {
+                    // Extract the search query
+                    const input = typeof block.input === 'string' ? JSON.parse(block.input) : block.input;
+                    const query = input.query;
+                    
+                    console.log(`Performing web search for query: "${query}"`);
+                    
+                    // Perform the web search
+                    const searchResults = await webSearch.search(query);
+                    
+                    console.log(`Received ${searchResults.results.length} search results`);
+                    
+                    // Add the tool response
+                    toolResponses.push({
+                      role: 'tool',
+                      tool_call_id: block.id,
+                      name: 'web_search',
+                      content: JSON.stringify(searchResults)
+                    });
+                    
+                  } catch (error) {
+                    console.error('Error processing web search:', error);
+                    
+                    // Return empty results on error
+                    toolResponses.push({
+                      role: 'tool',
+                      tool_call_id: block.id,
+                      name: 'web_search',
+                      content: JSON.stringify({ 
+                        results: [{
+                          title: "Error performing web search",
+                          link: "https://example.com",
+                          snippet: "An error occurred while performing the web search. The search service may be unavailable or the API key may be invalid."
+                        }] 
+                      })
+                    });
+                  }
+                }
               }
             }
+            
+            if (toolResponses.length > 0) {
+              console.log(`Adding ${toolResponses.length} tool responses to the conversation`);
+              
+              // Add tool responses to the conversation
+              // TypeScript requires us to manually add these as they have a different type
+              for (const resp of toolResponses) {
+                conversation.push(resp);
+              }
+              
+              // Continue the conversation with the tool responses
+              console.log('Sending follow-up request to Claude with tool responses');
+              
+              // Convert the conversation to the format expected by Claude
+              const messages = conversation.map(msg => {
+                if (msg.role === 'user') {
+                  return { role: 'user', content: msg.content };
+                } else if (msg.role === 'tool') {
+                  return { 
+                    role: 'tool', 
+                    tool_call_id: msg.tool_call_id, 
+                    name: msg.name, 
+                    content: msg.content 
+                  };
+                } else {
+                  // For assistant messages, we need to include the entire message object
+                  return msg;
+                }
+              });
+              
+              // Send the follow-up request
+              finalResponse = await anthropic.messages.create({
+                model: MODEL_NAME,
+                max_tokens: 4000,
+                temperature: 0.7,
+                system: this.AI_OPPORTUNITIES_SYSTEM,
+                messages: messages,
+                tools,
+                tool_choice: { type: "auto" }
+              });
+              
+              console.log('Received follow-up response from Claude');
+              
+              // Add the assistant's response to the conversation
+              conversation.push(finalResponse);
+              
+              // Check if there are more tool calls in the new response
+              if (finalResponse.content && Array.isArray(finalResponse.content)) {
+                const hasMoreToolUse = finalResponse.content.some(block => 
+                  typeof block === 'object' && 
+                  block !== null && 
+                  'type' in block && 
+                  block.type === 'tool_use'
+                );
+                
+                needsMoreSearches = hasMoreToolUse;
+                console.log(`Response contains more tool calls: ${needsMoreSearches}`);
+              } else {
+                needsMoreSearches = false;
+              }
+            } else {
+              // No tool responses were added, so we're done
+              needsMoreSearches = false;
+            }
+          } else {
+            // No tool use blocks found
+            needsMoreSearches = false;
           }
-          
-          // Add tool responses to the conversation
-          conversation = [...conversation, ...toolResponses];
-          
-          // Continue the conversation with the tool responses
-          finalResponse = await anthropic.messages.create({
-            model: MODEL_NAME,
-            max_tokens: 4000,
-            temperature: 0.7,
-            system: this.AI_OPPORTUNITIES_SYSTEM,
-            messages: conversation,
-            tools,
-            tool_choice: { type: "auto" }
-          });
-          
-          // Add the assistant's response to the conversation
-          conversation.push(finalResponse);
-          
-          // Check if the response has more tool calls
-          needsMoreSearches = finalResponse.tool_calls && finalResponse.tool_calls.length > 0;
-          
         } else {
-          // No tool calls, so we're done
+          // Not an assistant message or no content
           needsMoreSearches = false;
         }
       }
       
+      console.log(`Finished processing tool calls after ${toolCallCount} iterations`);
+      
+      // Extract the final text content
+      let aiSuggestions = '';
+      
+      if (finalResponse.content && finalResponse.content.length > 0) {
+        // Get all text blocks from the final response
+        const textBlocks = finalResponse.content.filter(block => 
+          typeof block === 'object' && 
+          block !== null && 
+          'type' in block && 
+          block.type === 'text' && 
+          'text' in block
+        );
+        
+        // Combine all text blocks
+        aiSuggestions = textBlocks.map(block => 'text' in block ? block.text : '').join('\n\n');
+      }
+      
+      if (!aiSuggestions) {
+        throw new Error('Failed to generate AI suggestions - no content in the response');
+      }
+      
+      console.log(`Saving AI suggestions to database for chat ${chatId}`);
+      
       // Save the AI suggestions to the database
-      const aiSuggestions = finalResponse.content[0].text;
       await storage.updateAiSuggestions(chatId, aiSuggestions);
       
       // Move to phase 3 completed
       await storage.updateChatPhase(chatId, 3);
       await storage.updateChatCompleted(chatId, 1);
+      
+      console.log(`Successfully completed AI opportunities generation for chat ${chatId}`);
       
       return aiSuggestions;
     } catch (error) {
