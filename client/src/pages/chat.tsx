@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { Header } from "@/components/layout/header";
 import { ChatHistory } from "@/components/chat/chat-history";
@@ -24,8 +24,17 @@ export default function ChatPage() {
   const [, setLocation] = useLocation();
   const [diagramModalOpen, setDiagramModalOpen] = useState(false);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   // Now using ProtectedRoute, so no need to redirect manually
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesContainerRef.current && activeChat?.messages?.length) {
+      const container = messagesContainerRef.current;
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [activeChat?.messages]);
 
   const handleNewChat = async () => {
     await createNewChat();
