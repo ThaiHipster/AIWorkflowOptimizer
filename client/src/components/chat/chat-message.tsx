@@ -128,36 +128,41 @@ export function ChatMessage({
 
       <div
         className={cn(
-          "rounded-lg shadow-sm p-4 max-w-3xl",
+          "rounded-lg shadow-md p-5 max-w-3xl",
           isUser 
-            ? "bg-primary-50 ml-12" 
-            : "bg-white"
+            ? "bg-primary-50 ml-12 border border-primary-100" 
+            : "bg-white border border-gray-100"
         )}
       >
         {isUser ? (
-          <p className="whitespace-pre-wrap">{message.content}</p>
+          <p className="whitespace-pre-wrap text-gray-800 leading-relaxed">{message.content}</p>
         ) : (
-          <div className="markdown">
-            <Markdown content={message.content} />
+          <div className="markdown overflow-hidden">
+            <Markdown content={message.content} className="text-sm sm:text-base" />
           </div>
         )}
         
         {/* View Diagram Button */}
         {hasViewDiagramOption && isLastMessage && (
-          <div className="mt-4 pt-3 border-t border-gray-200">
+          <div className="mt-5 pt-4 border-t border-gray-200">
             <ViewDiagramButton onClick={onViewDiagram} />
           </div>
         )}
         
         {/* Create Prompt Buttons for AI Suggestions */}
         {hasAiSuggestions && aiOpportunities.length > 0 && (
-          <div className="mt-4 pt-3 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Generate implementation prompt for:</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          <div className="mt-5 pt-4 border-t border-gray-200">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Generate implementation prompt for:</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {aiOpportunities.map((opportunity) => (
                 <button
                   key={opportunity.index}
-                  className="text-left px-3 py-2 rounded-md text-sm bg-gray-50 hover:bg-gray-100 border border-gray-200"
+                  className={cn(
+                    "text-left px-3.5 py-2.5 rounded-md text-sm hover:bg-gray-100 border transition-colors duration-200 ease-in-out",
+                    selectedOpportunity === opportunity.description
+                      ? "bg-primary-50 border-primary-200 text-primary-700"
+                      : "bg-gray-50 border-gray-200 text-gray-700"
+                  )}
                   onClick={() => setSelectedOpportunity(opportunity.description)}
                 >
                   {opportunity.description.length > 50 
@@ -168,7 +173,7 @@ export function ChatMessage({
             </div>
             
             {selectedOpportunity && (
-              <div className="mt-3">
+              <div className="mt-4">
                 <CreatePromptButton prompt={`Implementation Prompt: ${selectedOpportunity}`} />
               </div>
             )}
@@ -177,7 +182,7 @@ export function ChatMessage({
         
         {/* Create Prompt Button for existing prompt */}
         {hasImplementationPrompt && (
-          <div className="mt-4 pt-3 border-t border-gray-200">
+          <div className="mt-5 pt-4 border-t border-gray-200">
             <CreatePromptButton prompt={prompt} />
           </div>
         )}
