@@ -1,4 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { 
+  Message,
+  MessageParam,
+  MessageCreateParams,
+  Tool
+} from '@anthropic-ai/sdk/resources';
 import { storage } from './storage';
 import { WebSearch } from './websearch';
 
@@ -113,12 +119,15 @@ Format the prompt as a clear, well-structured implementation request that could 
         temperature: 0.7,
         system: "Generate a concise, descriptive 2-3 word title for a workflow based on these initial messages from a user. Respond with ONLY the title, no additional text or formatting.",
         messages: [
-          { role: 'user', content }
+          { role: 'user' as const, content }
         ],
       });
       
       // Extract title from response and trim any extra whitespace or punctuation
-      const title = response.content[0].text.trim().replace(/^["']|["']$/g, '');
+      let title = 'New Workflow';
+      if (response.content && response.content.length > 0 && 'text' in response.content[0]) {
+        title = response.content[0].text.trim().replace(/^["']|["']$/g, '');
+      }
       
       // Update the chat title in database
       await storage.updateChatTitle(chatId, title);
@@ -133,34 +142,84 @@ Format the prompt as a clear, well-structured implementation request that could 
   // Phase 1: Workflow Discovery
   public static async workflowDiscovery(chatId: string, userMessage: string, chatHistory: Array<{role: string, content: string}>): Promise<string> {
     try {
+      console.log(`Processing workflow discovery for chat ${chatId}`);
+      
+      // Get the current chat to check its state
+      const chat = await storage.getChatById(chatId);
+      if (!chat) {
+        throw new Error(`Chat with ID ${chatId} not found`);
+      }
+      
+      // Convert chat history to proper types
+      const typedMessages: MessageParam[] = chatHistory.map(msg => ({
+        role: (msg.role === 'user' || msg.role === 'assistant') ? msg.role : 'user',
+        content: msg.content
+      }));
+      
+      // Add the current user message
+      typedMessages.push({
+        role: 'user' as const,
+        content: userMessage
+      });
+      
+      // Create the message for Claude with comprehensive system prompt
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
         max_tokens: 4000,
         temperature: 0.7,
         system: this.WORKFLOW_DISCOVERY_SYSTEM,
-        messages: [
-          ...chatHistory,
-          { role: 'user', content: userMessage }
-        ],
+        messages: typedMessages,
       });
       
-      const assistantResponse = response.content[0].text;
+      // Extract and validate the response text
+      let assistantResponse = "I'm working on understanding your workflow...";
+      if (response.content && response.content.length > 0 && 'text' in response.content[0]) {
+        assistantResponse = response.content[0].text;
+      }
+      
+      console.log(`Received response from Claude for chat ${chatId}`);
       
       // Check if response contains JSON (workflow summary)
-      const jsonMatch = assistantResponse.match(/```json\s*({[\s\S]*?})\s*```|({[\s\S]*"pain_points"[\s\S]*})/);
+      // Look for JSON in code blocks or directly in the text
+      const jsonRegexPatterns = [
+        /```json\s*({[\s\S]*?})\s*```/, // JSON in code block with json tag
+        /```\s*({[\s\S]*?})\s*```/,     // JSON in untagged code block
+        /({[\s\S]*"title"[\s\S]*"start_event"[\s\S]*"steps"[\s\S]*"people"[\s\S]*"systems"[\s\S]*"pain_points"[\s\S]*})/ // Direct JSON in text
+      ];
       
-      if (jsonMatch) {
-        const jsonStr = jsonMatch[1] || jsonMatch[2];
-        try {
-          const workflowJson = JSON.parse(jsonStr.trim());
-          
+      let workflowJson = null;
+      let jsonStr = null;
+      
+      // Try each pattern until we find a match
+      for (const pattern of jsonRegexPatterns) {
+        const match = assistantResponse.match(pattern);
+        if (match) {
+          jsonStr = match[1];
+          try {
+            workflowJson = JSON.parse(jsonStr.trim());
+            // If parsing succeeds, break the loop
+            break;
+          } catch (e) {
+            console.warn(`Failed to parse potential JSON match with pattern ${pattern}:`, e);
+            // Continue trying other patterns
+          }
+        }
+      }
+      
+      if (workflowJson) {
+        console.log(`Successfully parsed workflow JSON for chat ${chatId}`);
+        
+        // Validate the structure of the workflow JSON
+        if (this.validateWorkflowJson(workflowJson)) {
           // Save the workflow JSON to the database
           await storage.updateWorkflowJson(chatId, workflowJson);
           
           // Move to phase 2
           await storage.updateChatPhase(chatId, 2);
-        } catch (e) {
-          console.error('Failed to parse workflow JSON:', e);
+          
+          console.log(`Updated chat ${chatId} to phase 2`);
+        } else {
+          console.warn(`Invalid workflow JSON structure detected in chat ${chatId}`);
         }
       }
       
@@ -168,6 +227,49 @@ Format the prompt as a clear, well-structured implementation request that could 
     } catch (error) {
       console.error('Error in workflow discovery:', error);
       throw error;
+    }
+  }
+  
+  // Helper method to validate workflow JSON structure
+  private static validateWorkflowJson(json: any): boolean {
+    try {
+      // Check if all required fields are present
+      const requiredFields = ['title', 'start_event', 'end_event', 'steps', 'people', 'systems', 'pain_points'];
+      for (const field of requiredFields) {
+        if (!json.hasOwnProperty(field)) {
+          console.warn(`Workflow JSON missing required field: ${field}`);
+          return false;
+        }
+      }
+      
+      // Check if steps is an array
+      if (!Array.isArray(json.steps)) {
+        console.warn('Workflow JSON steps is not an array');
+        return false;
+      }
+      
+      // Check if people is an array
+      if (!Array.isArray(json.people)) {
+        console.warn('Workflow JSON people is not an array');
+        return false;
+      }
+      
+      // Check if systems is an array
+      if (!Array.isArray(json.systems)) {
+        console.warn('Workflow JSON systems is not an array');
+        return false;
+      }
+      
+      // Check if pain_points is an array
+      if (!Array.isArray(json.pain_points)) {
+        console.warn('Workflow JSON pain_points is not an array');
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error validating workflow JSON:', error);
+      return false;
     }
   }
 
@@ -181,14 +283,18 @@ Format the prompt as a clear, well-structured implementation request that could 
         system: this.DIAGRAM_GENERATION_SYSTEM,
         messages: [
           { 
-            role: 'user', 
+            role: 'user' as const, 
             content: `Please convert this workflow JSON to Mermaid flowchart syntax:\n\n${JSON.stringify(workflowJson, null, 2)}` 
           }
         ],
       });
       
       // Extract Mermaid syntax from response
-      const mermaidSyntax = response.content[0].text;
+      let mermaidSyntax = "";
+      if (response.content && response.content.length > 0 && 'text' in response.content[0]) {
+        mermaidSyntax = response.content[0].text;
+      }
+      
       return mermaidSyntax.replace(/```mermaid|```/g, '').trim();
     } catch (error) {
       console.error('Error generating Mermaid syntax:', error);
@@ -216,24 +322,34 @@ Format the prompt as a clear, well-structured implementation request that could 
         system: "Convert the provided Mermaid flowchart syntax into a visualization. Return only the flowchart diagram as an image.",
         messages: [
           { 
-            role: 'user', 
+            role: 'user' as const, 
             content: `Generate a diagram visualization for this Mermaid flowchart code:\n\`\`\`mermaid\n${mermaidSyntax}\n\`\`\`` 
           }
         ],
       });
       
-      // Find the image in the response artifacts
-      const imageArtifact = response.artifacts && response.artifacts.length > 0 
-        ? response.artifacts.find(a => a.type === 'image')
-        : null;
+      // Find the image in the response artifacts if they exist
+      let imageUrl = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="16">Diagram could not be generated</text></svg>')}`;
       
-      if (!imageArtifact) {
-        throw new Error('No image artifact found in Claude response');
+      // Check if response has artifacts property (for Claude models that support image generation)
+      if (response.artifacts && Array.isArray(response.artifacts) && response.artifacts.length > 0) {
+        // Type guard to check if artifact has type and data properties
+        const artifact = response.artifacts.find(a => 
+          typeof a === 'object' && 
+          a !== null && 
+          'type' in a && 
+          a.type === 'image' && 
+          'data' in a
+        );
+        
+        if (artifact && 'data' in artifact) {
+          imageUrl = `data:image/png;base64,${artifact.data}`;
+        }
       }
       
-      // Return the image URL
+      // Return the image URL and mermaid syntax
       return {
-        imageUrl: `data:image/png;base64,${imageArtifact.data}`,
+        imageUrl,
         mermaidSyntax
       };
     } catch (error) {
@@ -409,6 +525,8 @@ Format the prompt as a clear, well-structured implementation request that could 
   // Process a regular chat message (for any phase)
   public static async processMessage(chatId: string, userMessage: string): Promise<string> {
     try {
+      console.log(`Processing message for chat ${chatId} with content: "${userMessage.substring(0, 50)}..."`);
+      
       // Get chat data to determine current phase
       const chat = await storage.getChatById(chatId);
       
@@ -423,40 +541,103 @@ Format the prompt as a clear, well-structured implementation request that could 
         content: msg.content
       }));
       
+      console.log(`Current chat phase: ${chat.phase}`);
+      
+      // Check if this is the first user message
+      const isFirstMessage = messageHistory.filter(msg => msg.role === 'user').length === 0;
+      
       // Process based on phase
       switch (chat.phase) {
         case 1:
-          return await this.workflowDiscovery(chatId, userMessage, chatHistory);
+          // In workflow discovery phase
+          console.log(`Processing workflow discovery for chat ${chatId}`);
+          
+          // Special handling for first message to give clear instructions
+          if (isFirstMessage) {
+            // Add additional context to help guide the user if this is their first message
+            const enhancedUserMessage = `${userMessage}\n\nPlease help me map out this workflow with details about the people involved, systems used, and any pain points.`;
+            return await this.workflowDiscovery(chatId, enhancedUserMessage, chatHistory);
+          } else {
+            return await this.workflowDiscovery(chatId, userMessage, chatHistory);
+          }
         
         case 2:
-          // If user confirms they want to generate a diagram
-          if (userMessage.toLowerCase().includes('yes') && 
-              (userMessage.toLowerCase().includes('diagram') || 
-               messageHistory[messageHistory.length - 1].content.toLowerCase().includes('diagram'))) {
+          // In diagram phase
+          console.log(`Processing diagram phase message for chat ${chatId}`);
+          
+          // Check if user confirms they want to generate a diagram
+          const lastAssistantMessage = messageHistory
+            .filter(msg => msg.role === 'assistant')
+            .pop()?.content || '';
             
+          const diagramMentioned = 
+            userMessage.toLowerCase().includes('diagram') || 
+            lastAssistantMessage.toLowerCase().includes('diagram');
+            
+          const userAgreed = 
+            userMessage.toLowerCase().includes('yes') || 
+            userMessage.toLowerCase().includes('sure') || 
+            userMessage.toLowerCase().includes('okay') ||
+            userMessage.toLowerCase().includes('generate') ||
+            userMessage.toLowerCase().includes('create');
+          
+          if ((diagramMentioned && userAgreed) || userMessage.toLowerCase().includes('generate diagram')) {
             // This endpoint will return a message suggesting to view the diagram
             // The actual diagram generation happens in a separate API call
             await storage.updateChatPhase(chatId, 3);
-            return 'I\'ve generated a workflow diagram based on our discussion! You can view it by clicking the "View Diagram" button. Would you like me to suggest AI opportunities that could improve this workflow?';
+            console.log(`Updated chat ${chatId} to phase 3 (AI opportunities)`);
+            
+            return 'I\'ve generated a workflow diagram based on our discussion! You can view it by clicking the "View Diagram" button below. Would you like me to suggest AI opportunities that could improve this workflow?';
           } else {
-            // Continue regular conversation
+            // Continue refining the workflow if they're not ready for the diagram
             return await this.workflowDiscovery(chatId, userMessage, chatHistory);
           }
         
         case 3:
-          // If user confirms they want AI suggestions
-          if (userMessage.toLowerCase().includes('yes') && 
-              (userMessage.toLowerCase().includes('suggest') || 
-               messageHistory[messageHistory.length - 1].content.toLowerCase().includes('suggest'))) {
+          // In AI suggestions phase
+          console.log(`Processing AI opportunities phase message for chat ${chatId}`);
+          
+          // Check if user confirms they want AI suggestions
+          const lastAssistantMsg = messageHistory
+            .filter(msg => msg.role === 'assistant')
+            .pop()?.content || '';
             
-            return 'I\'ll analyze your workflow and research AI implementation opportunities that could help optimize it. This might take a moment as I search for relevant industry examples and best practices...';
+          const suggestMentioned = 
+            userMessage.toLowerCase().includes('suggest') || 
+            userMessage.toLowerCase().includes('opportunities') ||
+            userMessage.toLowerCase().includes('ai') ||
+            lastAssistantMsg.toLowerCase().includes('suggest') ||
+            lastAssistantMsg.toLowerCase().includes('opportunities');
+            
+          const userConfirmed = 
+            userMessage.toLowerCase().includes('yes') || 
+            userMessage.toLowerCase().includes('sure') ||
+            userMessage.toLowerCase().includes('okay') ||
+            userMessage.toLowerCase().includes('please');
+          
+          if ((suggestMentioned && userConfirmed) || userMessage.toLowerCase().includes('generate suggestions')) {
+            console.log(`User requested AI suggestions for chat ${chatId}`);
+            return 'I\'ll analyze your workflow and research AI implementation opportunities that could help optimize it. This might take a moment as I search for relevant industry examples and best practices. Please click the "Generate AI Suggestions" button to start the process.';
           } else {
-            // Continue regular conversation with workflow discovery system
-            return await this.workflowDiscovery(chatId, userMessage, chatHistory);
+            // If they're not asking for suggestions yet, continue the conversation
+            // but still in the context of the workflow
+            const response = await anthropic.messages.create({
+              model: MODEL_NAME,
+              max_tokens: 2000,
+              temperature: 0.7,
+              system: "You are an AI workflow consultant. You have already helped the user map their workflow and create a diagram. Now you can discuss the workflow or answer questions about it. If the user seems interested in AI enhancement opportunities, suggest they click the 'Generate AI Suggestions' button.",
+              messages: [
+                ...chatHistory,
+                { role: 'user', content: userMessage }
+              ],
+            });
+            
+            return response.content[0].text;
           }
         
         default:
-          // Default to workflow discovery for all other cases
+          // For any other phase or if phase is undefined, default to workflow discovery
+          console.log(`Using default workflow discovery for chat ${chatId} with unknown phase ${chat.phase}`);
           return await this.workflowDiscovery(chatId, userMessage, chatHistory);
       }
     } catch (error) {
