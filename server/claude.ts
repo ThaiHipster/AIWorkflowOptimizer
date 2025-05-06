@@ -433,49 +433,80 @@ Format the prompt as a clear, well-structured implementation request that could 
     }
   }
 
+  // Two-step process for generating diagrams: JSON → Mermaid → Diagram
   public static async generateDiagram(chatId: string): Promise<{ imageUrl: string, mermaidSyntax: string }> {
     try {
-      // Get chat data
+      console.log(`Starting diagram generation for chat ${chatId}`);
+      
+      // Step 0: Get chat data
       const chat = await storage.getChatById(chatId);
       
       if (!chat || !chat.workflow_json) {
         throw new Error('No workflow data found for this chat');
       }
       
-      // Generate Mermaid syntax
+      console.log(`Retrieved workflow JSON for chat ${chatId}`);
+      
+      // Step 1: Generate Mermaid syntax from workflow JSON
+      console.log(`Generating Mermaid syntax from workflow JSON`);
       const mermaidSyntax = await this.generateMermaidSyntax(chat.workflow_json);
       
-      // Use Claude to generate a diagram from the Mermaid syntax
-      const response = await anthropic.messages.create({
-        model: MODEL_NAME,
-        max_tokens: 4000,
-        temperature: 0.2,
-        system: "Convert the provided Mermaid flowchart syntax into a visualization. Return only the flowchart diagram as an image.",
-        messages: [
-          { 
-            role: 'user' as const, 
-            content: `Generate a diagram visualization for this Mermaid flowchart code:\n\`\`\`mermaid\n${mermaidSyntax}\n\`\`\`` 
-          }
-        ],
-      });
+      if (!mermaidSyntax || mermaidSyntax.trim() === '') {
+        throw new Error('Failed to generate Mermaid syntax');
+      }
       
-      // Find the image in the response artifacts if they exist
-      let imageUrl = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400"><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="16">Diagram could not be generated</text></svg>')}`;
+      console.log(`Successfully generated Mermaid syntax`);
       
-      // Check if response has artifacts property (for Claude models that support image generation)
-      if (response.artifacts && Array.isArray(response.artifacts) && response.artifacts.length > 0) {
-        // Type guard to check if artifact has type and data properties
-        const artifact = response.artifacts.find(a => 
-          typeof a === 'object' && 
-          a !== null && 
-          'type' in a && 
-          a.type === 'image' && 
-          'data' in a
-        );
+      // Step 2: Generate visual diagram from Mermaid syntax using Claude's artifact generation
+      console.log(`Generating visual diagram from Mermaid syntax`);
+      
+      // Define a fallback SVG in case artifact generation fails
+      const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400">
+        <rect width="100%" height="100%" fill="#f8f9fa" />
+        <text x="50%" y="40%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold">Workflow Diagram</text>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="16">Could not generate visualization</text>
+        <text x="50%" y="60%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="14" fill="#666">The Mermaid syntax is available in the response</text>
+      </svg>`;
+      
+      let imageUrl = `data:image/svg+xml,${encodeURIComponent(fallbackSvg)}`;
+      
+      try {
+        // Use Claude to generate a diagram with artifact generation
+        const response = await anthropic.messages.create({
+          model: MODEL_NAME,
+          max_tokens: 1000,
+          temperature: 0.2,
+          system: "You are a diagram generator. Convert the provided Mermaid flowchart syntax into a visual diagram. Only focus on generating the diagram, don't add any explanation.",
+          messages: [
+            { 
+              role: 'user' as const, 
+              content: `Generate a visual diagram for this Mermaid flowchart code. Make sure to use clear color contrasts and appropriate spacing for readability:\n\n\`\`\`mermaid\n${mermaidSyntax}\n\`\`\``
+            }
+          ],
+        });
         
-        if (artifact && 'data' in artifact) {
-          imageUrl = `data:image/png;base64,${artifact.data}`;
+        console.log('Received response from Claude for diagram generation');
+        
+        // Extract image from response if available
+        if (response.content && response.content.length > 0) {
+          // Find the image if it exists in content
+          const imageBlock = response.content.find(block => 
+            'type' in block && block.type === 'image'
+          );
+          
+          if (imageBlock && 'type' in imageBlock && imageBlock.type === 'image' && 'source' in imageBlock) {
+            const source = imageBlock.source;
+            if ('media_type' in source && 'data' in source) {
+              imageUrl = `data:${source.media_type};base64,${source.data}`;
+              console.log('Successfully extracted image from Claude response');
+            }
+          } else {
+            console.warn('No image found in Claude response');
+          }
         }
+      } catch (diagramError) {
+        console.error('Error in diagram artifact generation:', diagramError);
+        // We'll continue with the fallback image
       }
       
       // Return the image URL and mermaid syntax
@@ -484,7 +515,7 @@ Format the prompt as a clear, well-structured implementation request that could 
         mermaidSyntax
       };
     } catch (error) {
-      console.error('Error generating diagram:', error);
+      console.error('Error in diagram generation process:', error);
       throw error;
     }
   }
