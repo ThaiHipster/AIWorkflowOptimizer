@@ -86,12 +86,7 @@ export default function ChatPage() {
 
       <main className="flex-1 flex overflow-hidden">
         {/* Chat History Sidebar */}
-        <ChatHistory
-          chats={chats}
-          activeChatId={activeChat?.id || null}
-          onChatSelect={handleChatSelect}
-          onNewChat={handleNewChat}
-        />
+        <ChatHistory />
 
         {/* Chat Content */}
         <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden">

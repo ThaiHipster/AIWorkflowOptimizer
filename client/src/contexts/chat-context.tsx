@@ -1,8 +1,9 @@
 import { createContext, useState, useEffect, ReactNode } from "react";
 import { Chat, Message } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 
 interface ChatContextType {
   chats: Chat[];
@@ -28,64 +29,59 @@ const defaultContextValue: ChatContextType = {
 
 export const ChatContext = createContext<ChatContextType>(defaultContextValue);
 
-interface ChatProviderProps {
-  children: ReactNode;
-}
-
-export function ChatProvider({ children }: ChatProviderProps) {
-  const [chats, setChats] = useState<Chat[]>([]);
+export function ChatProvider({ children }: { children: ReactNode }) {
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [manualLoading, setManualLoading] = useState<boolean>(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Load chats when user changes
+  // Fetch user's chats
+  const { 
+    data: chats = [], 
+    isLoading: isChatsLoading, 
+    refetch: refetchChats 
+  } = useQuery({
+    queryKey: ['/api/chats', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      try {
+        const res = await apiRequest("GET", `/api/chats?userId=${user.id}`);
+        const data = await res.json();
+        return data.success ? data.chats : [];
+      } catch (error) {
+        console.error("Error fetching chats:", error);
+        return [];
+      }
+    },
+    enabled: !!user,
+  });
+  
+  // Keep track of overall loading state
+  const isLoading = isChatsLoading || manualLoading;
+
+  // Clear active chat when user logs out
   useEffect(() => {
-    if (user) {
-      refreshChats();
-    } else {
-      setChats([]);
+    if (!user) {
       setActiveChat(null);
     }
   }, [user]);
 
+  // Refresh chats data
   const refreshChats = async () => {
-    if (!user) return;
-
-    setIsLoading(true);
     try {
-      const res = await apiRequest("GET", `/api/chats?userId=${user.id}`, undefined);
-      const data = await res.json();
-
-      if (data.success) {
-        setChats(data.chats);
-        
-        // If we have an active chat, update it with the refreshed data
-        if (activeChat) {
-          const updatedActiveChat = data.chats.find((chat: Chat) => chat.id === activeChat.id);
-          if (updatedActiveChat) {
-            setActiveChat(updatedActiveChat);
-          }
-        }
-      }
+      await refetchChats();
     } catch (error) {
-      console.error("Error fetching chats:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load chat history",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+      console.error("Error refreshing chats:", error);
     }
   };
 
+  // Load a specific chat by ID
   const loadChatById = async (chatId: string) => {
-    setIsLoading(true);
+    setManualLoading(true);
     try {
-      const res = await apiRequest("GET", `/api/chats/${chatId}`, undefined);
+      const res = await apiRequest("GET", `/api/chats/${chatId}`);
       const data = await res.json();
-
+      
       if (data.success) {
         setActiveChat(data.chat);
         return data.chat;
@@ -100,18 +96,19 @@ export function ChatProvider({ children }: ChatProviderProps) {
       });
       return null;
     } finally {
-      setIsLoading(false);
+      setManualLoading(false);
     }
   };
 
+  // Create a new chat
   const createNewChat = async () => {
     if (!user) return null;
-
-    setIsLoading(true);
+    
+    setManualLoading(true);
     try {
       const res = await apiRequest("POST", "/api/chats", { userId: user.id });
       const data = await res.json();
-
+      
       if (data.success) {
         await refreshChats();
         setActiveChat(data.chat);
@@ -119,31 +116,29 @@ export function ChatProvider({ children }: ChatProviderProps) {
       }
       return null;
     } catch (error) {
-      console.error("Error creating new chat:", error);
+      console.error("Error creating chat:", error);
       toast({
         title: "Error",
-        description: "Failed to create new workflow chat",
+        description: "Failed to create new workflow",
         variant: "destructive",
       });
       return null;
     } finally {
-      setIsLoading(false);
+      setManualLoading(false);
     }
   };
 
+  // Send a message in the active chat
   const sendMessage = async (content: string) => {
     if (!activeChat) return;
-
-    setIsLoading(true);
+    
+    setManualLoading(true);
     try {
       const res = await apiRequest("POST", `/api/chats/${activeChat.id}/messages`, { content });
       const data = await res.json();
-
+      
       if (data.success) {
-        // Update the active chat with the new messages and potentially updated chat data
         setActiveChat(data.chat);
-        
-        // Also refresh the chat list to update any titles that might have changed
         refreshChats();
       }
     } catch (error) {
@@ -154,34 +149,31 @@ export function ChatProvider({ children }: ChatProviderProps) {
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setManualLoading(false);
     }
   };
 
+  // Generate AI suggestions for the active chat
   const generateAiSuggestions = async () => {
     if (!activeChat) return;
-
-    setIsLoading(true);
+    
+    setManualLoading(true);
     try {
       const res = await apiRequest("POST", `/api/chats/${activeChat.id}/generate-suggestions`, {});
       const data = await res.json();
-
+      
       if (data.success) {
-        // Update the active chat with the AI suggestions
         setActiveChat(data.chat);
         
-        // Create a message with the AI suggestions
         if (data.chat.ai_suggestions_markdown) {
           await apiRequest("POST", `/api/chats/${activeChat.id}/messages`, { 
-            content: data.chat.ai_suggestions_markdown
+            content: data.chat.ai_suggestions_markdown 
           });
           
-          // Reload the chat to get the updated messages
           await loadChatById(activeChat.id);
         }
         
-        // Also refresh the chat list
-        await refreshChats();
+        refreshChats();
       }
     } catch (error) {
       console.error("Error generating AI suggestions:", error);
@@ -191,29 +183,29 @@ export function ChatProvider({ children }: ChatProviderProps) {
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setManualLoading(false);
     }
   };
 
+  const contextValue: ChatContextType = {
+    chats,
+    activeChat,
+    isLoading,
+    setActiveChat: async (chat) => {
+      if (chat) {
+        await loadChatById(chat.id);
+      } else {
+        setActiveChat(null);
+      }
+    },
+    createNewChat,
+    sendMessage,
+    refreshChats,
+    generateAiSuggestions,
+  };
+
   return (
-    <ChatContext.Provider
-      value={{
-        chats,
-        activeChat,
-        isLoading,
-        setActiveChat: async (chat) => {
-          if (chat) {
-            await loadChatById(chat.id);
-          } else {
-            setActiveChat(null);
-          }
-        },
-        createNewChat,
-        sendMessage,
-        refreshChats,
-        generateAiSuggestions,
-      }}
-    >
+    <ChatContext.Provider value={contextValue}>
       {children}
     </ChatContext.Provider>
   );

@@ -1,28 +1,20 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { PlusIcon, X } from "lucide-react";
+import { PlusIcon, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { Chat } from "@shared/schema";
 import { useMobile } from "@/hooks/use-mobile";
+import { useChat } from "@/hooks/use-chat";
 
 interface ChatHistoryProps {
-  chats: Chat[];
-  activeChatId: string | null;
-  onChatSelect: (chatId: string) => void;
-  onNewChat: () => void;
   className?: string;
 }
 
-export function ChatHistory({
-  chats,
-  activeChatId,
-  onChatSelect,
-  onNewChat,
-  className,
-}: ChatHistoryProps) {
+export function ChatHistory({ className }: ChatHistoryProps) {
   const [isOpen, setIsOpen] = useState(false);
   const isMobile = useMobile();
+  const { chats, activeChat, isLoading, setActiveChat, createNewChat } = useChat();
 
   const toggleSidebar = () => {
     setIsOpen(!isOpen);
@@ -32,6 +24,32 @@ export function ChatHistory({
     return formatDistanceToNow(new Date(date), { addSuffix: true });
   };
 
+  const handleChatSelect = (chatId: string) => {
+    const selectedChat = chats.find((chat) => chat.id === chatId);
+    if (selectedChat) {
+      setActiveChat(selectedChat);
+    }
+    if (isMobile) {
+      setIsOpen(false);
+    }
+  };
+
+  const handleNewChat = async () => {
+    await createNewChat();
+    if (isMobile) {
+      setIsOpen(false);
+    }
+  };
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   // For mobile view
   if (isMobile) {
     return (
@@ -40,7 +58,7 @@ export function ChatHistory({
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden"
+          className="md:hidden fixed top-4 left-4 z-50"
           onClick={toggleSidebar}
           aria-label="Toggle chat history"
         >
@@ -57,7 +75,7 @@ export function ChatHistory({
           )}
         >
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-medium text-gray-900">Chat History</h2>
+            <h2 className="text-lg font-medium text-gray-900">Workflow History</h2>
             <Button variant="ghost" size="icon" onClick={toggleSidebar}>
               <X className="h-5 w-5" />
             </Button>
@@ -65,11 +83,8 @@ export function ChatHistory({
 
           <div className="p-4">
             <Button
-              onClick={() => {
-                onNewChat();
-                setIsOpen(false);
-              }}
-              className="w-full bg-primary-600 text-white hover:bg-primary-700"
+              onClick={handleNewChat}
+              className="w-full bg-primary text-white hover:bg-primary/90"
             >
               <PlusIcon className="h-5 w-5 mr-2" />
               New Workflow
@@ -80,23 +95,20 @@ export function ChatHistory({
             {chats.map((chat) => (
               <button
                 key={chat.id}
-                onClick={() => {
-                  onChatSelect(chat.id);
-                  setIsOpen(false);
-                }}
+                onClick={() => handleChatSelect(chat.id)}
                 className={cn(
-                  "w-full text-left px-4 py-3 hover:bg-gray-50 focus:outline-none focus:bg-gray-50 transition duration-150 ease-in-out border-l-4",
-                  chat.id === activeChatId
-                    ? "border-primary-500 bg-primary-50"
-                    : "border-transparent hover:border-primary-300"
+                  "w-full text-left px-4 py-3 hover:bg-accent focus:outline-none focus:bg-accent transition duration-150 ease-in-out border-l-4",
+                  activeChat?.id === chat.id
+                    ? "border-primary bg-accent"
+                    : "border-transparent hover:border-primary/50"
                 )}
               >
                 <div className="flex items-start justify-between">
                   <div className="overflow-hidden">
-                    <h3 className="text-sm font-medium text-gray-900 truncate max-w-[180px]">
+                    <h3 className="text-sm font-medium text-foreground truncate max-w-[180px]">
                       {chat.title || "New Workflow"}
                     </h3>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {formatChatDate(chat.created_at)}
                     </p>
                   </div>
@@ -104,7 +116,7 @@ export function ChatHistory({
                     className={cn(
                       "text-xs px-2 py-1 rounded-full",
                       chat.completed
-                        ? "bg-gray-100 text-gray-600"
+                        ? "bg-muted text-muted-foreground"
                         : "bg-green-100 text-green-800"
                     )}
                   >
@@ -115,8 +127,8 @@ export function ChatHistory({
             ))}
 
             {chats.length === 0 && (
-              <div className="px-4 py-8 text-center text-gray-500">
-                <p>No chat history yet</p>
+              <div className="px-4 py-8 text-center text-muted-foreground">
+                <p>No workflow history yet</p>
                 <p className="text-sm mt-2">
                   Create a new workflow to get started
                 </p>
@@ -132,18 +144,18 @@ export function ChatHistory({
   return (
     <aside
       className={cn(
-        "w-80 bg-white shadow-md overflow-y-auto border-r border-gray-200 hidden md:block",
+        "w-80 bg-background border-r border-border overflow-y-auto hidden md:block h-full",
         className
       )}
     >
-      <div className="p-4 border-b border-gray-200 bg-gray-50">
-        <h2 className="text-lg font-medium text-gray-900">Chat History</h2>
+      <div className="p-4 border-b border-border bg-muted/50">
+        <h2 className="text-lg font-medium text-foreground">Workflow History</h2>
       </div>
 
       <div className="p-4">
         <Button
-          onClick={onNewChat}
-          className="w-full bg-primary-600 text-white hover:bg-primary-700"
+          onClick={handleNewChat}
+          className="w-full"
         >
           <PlusIcon className="h-5 w-5 mr-2" />
           New Workflow
@@ -154,20 +166,20 @@ export function ChatHistory({
         {chats.map((chat) => (
           <button
             key={chat.id}
-            onClick={() => onChatSelect(chat.id)}
+            onClick={() => handleChatSelect(chat.id)}
             className={cn(
-              "w-full text-left px-4 py-3 hover:bg-gray-50 focus:outline-none focus:bg-gray-50 transition duration-150 ease-in-out border-l-4",
-              chat.id === activeChatId
-                ? "border-primary-500 bg-primary-50"
-                : "border-transparent hover:border-primary-300"
+              "w-full text-left px-4 py-3 hover:bg-accent focus:outline-none focus:bg-accent transition duration-150 ease-in-out border-l-4",
+              activeChat?.id === chat.id
+                ? "border-primary bg-accent"
+                : "border-transparent hover:border-primary/50"
             )}
           >
             <div className="flex items-start justify-between">
               <div className="overflow-hidden">
-                <h3 className="text-sm font-medium text-gray-900 truncate max-w-[180px]">
+                <h3 className="text-sm font-medium text-foreground truncate max-w-[180px]">
                   {chat.title || "New Workflow"}
                 </h3>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {formatChatDate(chat.created_at)}
                 </p>
               </div>
@@ -175,7 +187,7 @@ export function ChatHistory({
                 className={cn(
                   "text-xs px-2 py-1 rounded-full",
                   chat.completed
-                    ? "bg-gray-100 text-gray-600"
+                    ? "bg-muted text-muted-foreground"
                     : "bg-green-100 text-green-800"
                 )}
               >
@@ -186,8 +198,8 @@ export function ChatHistory({
         ))}
 
         {chats.length === 0 && (
-          <div className="px-4 py-8 text-center text-gray-500">
-            <p>No chat history yet</p>
+          <div className="px-4 py-8 text-center text-muted-foreground">
+            <p>No workflow history yet</p>
             <p className="text-sm mt-2">
               Create a new workflow to get started
             </p>
