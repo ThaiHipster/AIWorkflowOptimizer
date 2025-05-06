@@ -25,12 +25,7 @@ export default function ChatPage() {
   const [diagramModalOpen, setDiagramModalOpen] = useState(false);
   const [isSuggestionsLoading, setIsSuggestionsLoading] = useState(false);
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!user && !authLoading) {
-      setLocation("/login");
-    }
-  }, [user, authLoading, setLocation]);
+  // Now using ProtectedRoute, so no need to redirect manually
 
   const handleNewChat = async () => {
     await createNewChat();

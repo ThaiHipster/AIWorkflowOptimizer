@@ -4,15 +4,16 @@ import { Toaster } from "@/components/ui/toaster";
 import { queryClient } from "./lib/queryClient";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ChatProvider } from "@/contexts/chat-context";
-import LoginPage from "@/pages/login";
+import AuthPage from "@/pages/auth-page";
 import ChatPage from "@/pages/chat";
 import NotFound from "@/pages/not-found";
+import { ProtectedRoute } from "@/lib/protected-route";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={ChatPage} />
-      <Route path="/login" component={LoginPage} />
+      <ProtectedRoute path="/" component={ChatPage} />
+      <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
   );
