@@ -16,6 +16,18 @@ import { v4 as uuidv4 } from 'uuid';
 // User operations
 export const storage = {
   // User methods
+  async getUserById(id: string): Promise<User | undefined> {
+    try {
+      const result = await db.query.users.findFirst({
+        where: eq(users.id, id),
+      });
+      return result;
+    } catch (error) {
+      console.error('Error getting user by ID:', error);
+      throw error;
+    }
+  },
+  
   async getUserByCompanyAndEmail(company_name: string, email: string): Promise<User | undefined> {
     try {
       const result = await db.query.users.findFirst({

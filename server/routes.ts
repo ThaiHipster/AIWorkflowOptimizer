@@ -15,8 +15,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const data = loginSchema.parse(req.body);
       const user = await storage.getOrCreateUser(data.company_name, data.email);
       
-      // In a real app, you might set up a proper session here
-      // For this simple case, we'll just return the user ID for client-side storage
       return res.status(200).json({ 
         success: true, 
         user: {
