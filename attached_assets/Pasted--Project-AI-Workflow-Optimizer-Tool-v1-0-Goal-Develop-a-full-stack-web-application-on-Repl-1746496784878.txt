@@ -1,0 +1,74 @@
+# Project: AI Workflow Optimizer Tool v1.0
+
+## Goal:
+Develop a full-stack web application on Replit that acts as an AI-powered workflow analysis tool using the Anthropic Claude API. The application will guide users through three phases via a chat interface: Workflow Mapping, Diagram Generation, and AI Opportunity Suggestions.
+
+## Core Requirements & Architecture:
+
+1.  **Tech Stack:**
+    * **Frontend:** React (using Vite recommended)
+    * **Backend:** Python with FastAPI
+    * **Database:** PostgreSQL. (Rationale: Relational structure is suitable for user/chat/workflow data, offers scalability, good ecosystem support, and handles structured JSONB well for workflow details). Set up connection via Replit Secrets.
+    * **LLM API:** Anthropic Claude API using the `claude-3-7-sonnet-20250219` model. Manage API key via Replit Secrets.
+    * **Web Search:** Integrate a web search tool (e.g., Google Search API, Serper API - choose one suitable for the project scale/budget). Manage API key via Replit Secrets. Implement Claude Tool Use for triggering searches from the backend.
+
+2.  **User & Session Management:**
+    * Implement a simple login using only "Company Name" and "Email Address". No password.
+    * Create/lookup user profile in the PostgreSQL `users` table (schema: `id`, `company_name`, `email`, `created_at`, unique constraint on company/email).
+    * Maintain user session via a `user_id` stored client-side (e.g., local storage).
+    * All data (chats, workflows) must be associated with the `user_id`.
+
+3.  **Chat Interface & History (React Frontend):**
+    * Two-panel layout: Left panel for Chat History, Right panel for Active Chat.
+    * **Chat History:**
+        * List titles of past chats for the logged-in user (fetched from PostgreSQL `chats` table).
+        * Clicking a title loads the conversation (start with read-only).
+    * **Active Chat:**
+        * Standard message display (user/LLM distinction).
+        * MUST render Markdown correctly from LLM responses (paragraphs, bold, numbered/bulleted lists with proper line breaks).
+    * **Chat Title Generation:** Implement a backend endpoint that takes the first 3 user messages of a chat, calls Claude (`claude-3-7-sonnet-20250219`) with a simple prompt to generate a 2-3 word title, and saves it to the `chats` table. Trigger this when a chat concludes.
+
+4.  **Phase 1: Workflow Mapping (Backend Logic + LLM Interaction):**
+    * Use the provided `WORKFLOW_DISCOVERY_PROMPT` (will be supplied separately).
+    * Guide user conversation to capture: `title`, `start_event`, `end_event`, `steps[]`, `people[]` (internal/external), `systems[]` (internal/external), `pain_points[]`.
+    * Structure the final confirmed workflow details into a JSON object.
+    * Persist this JSON object in the PostgreSQL `chats` table (`workflow_json` column, type JSONB) associated with the chat session.
+
+5.  **Phase 2: Diagram Generation (Backend Logic + LLM Interaction):**
+    * **CRITICAL FLOW:**
+        * Triggered when user confirms 'yes' to diagram offer (after Phase 1).
+        * Backend retrieves the saved `workflow_json`.
+        * Backend makes an **intermediate LLM call** (`claude-3-7-sonnet-20250219`) with a specific prompt to translate the `workflow_json` into **Mermaid flowchart syntax** (string output).
+        * Backend makes a **second LLM call** (`claude-3-7-sonnet-20250219`) using the Claude Artifact API, providing the generated Mermaid syntax and requesting an `image` artifact.
+        * Backend sends the resulting image URL/data to the frontend.
+    * **Frontend:** Display a link "View Diagram" that opens the image in a new tab.
+    * **Error Handling:** If any step fails, inform user clearly ("Diagram generation failed.") and offer to proceed to Phase 3.
+
+6.  **Phase 3: AI Opportunity Suggestions (Backend Logic + LLM Interaction + Tool Use):**
+    * Triggered when user confirms 'yes' to AI suggestions.
+    * Backend retrieves `workflow_json`.
+    * Backend calls Claude (`claude-3-7-sonnet-20250219`) with the `AI_OPPORTUNITIES_PROMPT` (will be supplied separately), the `workflow_json`, and **enabled Tool Use for the integrated Web Search tool**. The prompt contains URLs for the LLM to research via the search tool.
+    * LLM returns 5-10 suggestions formatted precisely as a Markdown table (columns: Step/Pain-point, Opportunity, Description, Complexity, Expected Benefit, Sources with inline citations linked below).
+    * Backend saves the Markdown table (`ai_suggestions_markdown` column, TEXT type) in the `chats` table.
+    * Frontend renders the Markdown table correctly.
+
+7.  **"Create Prompt" Feature (Frontend + Backend + LLM Interaction):**
+    * **Frontend:** Add a "Create Prompt" button/link to each row of the AI suggestions table.
+    * **Backend:** On click, receive the `Description` text for that row. Make a new LLM call (`claude-3-7-sonnet-20250219`) with a prompt instructing it to generate a detailed implementation prompt based on the description (suitable for copy-pasting into another advanced LLM).
+    * **Frontend:** Display the generated implementation prompt to the user (e.g., in a modal).
+
+8.  **Database Schema (`chats` table example):**
+    * `id` (UUID, PK)
+    * `user_id` (UUID, FK references `users.id`)
+    * `title` (TEXT)
+    * `created_at` (TIMESTAMPZ)
+    * `workflow_json` (JSONB)
+    * `ai_suggestions_markdown` (TEXT)
+    * (Consider adding `conversation_history` JSONB if needed later)
+
+## Initial Setup:
+* Set up the project structure for React frontend and FastAPI backend.
+* Configure Replit Secrets for Claude API Key, Web Search API Key, and PostgreSQL connection string.
+* Establish basic frontend-backend communication.
+* Set up PostgreSQL database and create initial `users` and `chats` tables.
+* Implement the basic chat interface layout.
