@@ -3,6 +3,7 @@ import { Markdown } from "@/components/ui/markdown";
 import { CreatePromptButton } from "@/components/chat/create-prompt-button";
 import { ViewDiagramButton } from "@/components/chat/view-diagram-button";
 import { Message } from "@shared/schema";
+import { useState, useEffect } from "react";
 
 interface ChatMessageProps {
   message: Message;
@@ -20,6 +21,8 @@ export function ChatMessage({
   onViewDiagram
 }: ChatMessageProps) {
   const isUser = message.role === "user";
+  const [aiOpportunities, setAiOpportunities] = useState<{ description: string, index: number }[]>([]);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<string | null>(null);
   
   // Check if message contains an implementation prompt section
   const hasImplementationPrompt = message.content.includes("Implementation Prompt:") && 
@@ -30,6 +33,11 @@ export function ChatMessage({
                               !isUser &&
                               message.content.includes("workflow diagram");
   
+  // Check if message contains AI suggestions table
+  const hasAiSuggestions = !isUser && 
+                          (message.content.includes("| Step/Pain-point | Opportunity | Description |") ||
+                           message.content.includes("| Opportunity | Description | Complexity |"));
+  
   // Extract the implementation prompt section if it exists
   const extractPrompt = (content: string) => {
     const promptRegex = /Implementation Prompt:[\s\S]*?(?=\n\n|$)/;
@@ -37,7 +45,58 @@ export function ChatMessage({
     return match ? match[0] : "";
   };
   
-  const prompt = hasImplementationPrompt ? extractPrompt(message.content) : "";
+  // Extract AI opportunities from the message content
+  useEffect(() => {
+    if (hasAiSuggestions) {
+      // Regular expression to match markdown table rows
+      const rowRegex = /\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|/g;
+      const content = message.content;
+      
+      const opportunities: { description: string, index: number }[] = [];
+      let match;
+      let index = 0;
+      
+      // Skip the header row and separator row by starting the index at 2
+      let rowCount = 0;
+      
+      while ((match = rowRegex.exec(content)) !== null) {
+        rowCount++;
+        // Skip header and separator rows (first 2 rows typically)
+        if (rowCount <= 2) continue;
+        
+        // Get opportunity name and description from the row
+        // Format can be either:
+        // | Step/Pain-point | Opportunity | Description | ...
+        // or
+        // | Opportunity | Description | Complexity | ...
+        
+        let opportunityName, description;
+        
+        if (content.includes("| Step/Pain-point | Opportunity | Description |")) {
+          // Format: | Step/Pain-point | Opportunity | Description | ...
+          opportunityName = match[2].trim();
+          description = match[3].trim();
+        } else {
+          // Format: | Opportunity | Description | Complexity | ...
+          opportunityName = match[1].trim();
+          description = match[2].trim();
+        }
+        
+        // Combine name and description
+        const fullDescription = `${opportunityName}: ${description}`;
+        
+        opportunities.push({
+          description: fullDescription,
+          index: index++
+        });
+      }
+      
+      setAiOpportunities(opportunities);
+    }
+  }, [message.content, hasAiSuggestions]);
+  
+  const prompt = hasImplementationPrompt ? extractPrompt(message.content) : 
+                 selectedOpportunity ? `Implementation Prompt: ${selectedOpportunity}` : "";
 
   return (
     <div
@@ -90,7 +149,33 @@ export function ChatMessage({
           </div>
         )}
         
-        {/* Create Prompt Button */}
+        {/* Create Prompt Buttons for AI Suggestions */}
+        {hasAiSuggestions && aiOpportunities.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-gray-200">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Generate implementation prompt for:</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {aiOpportunities.map((opportunity) => (
+                <button
+                  key={opportunity.index}
+                  className="text-left px-3 py-2 rounded-md text-sm bg-gray-50 hover:bg-gray-100 border border-gray-200"
+                  onClick={() => setSelectedOpportunity(opportunity.description)}
+                >
+                  {opportunity.description.length > 50 
+                    ? opportunity.description.substring(0, 50) + '...' 
+                    : opportunity.description}
+                </button>
+              ))}
+            </div>
+            
+            {selectedOpportunity && (
+              <div className="mt-3">
+                <CreatePromptButton prompt={`Implementation Prompt: ${selectedOpportunity}`} />
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* Create Prompt Button for existing prompt */}
         {hasImplementationPrompt && (
           <div className="mt-4 pt-3 border-t border-gray-200">
             <CreatePromptButton prompt={prompt} />
