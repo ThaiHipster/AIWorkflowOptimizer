@@ -109,46 +109,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Save user message
-      const userMessage = await storage.createMessage({
-        chat_id: chatId,
-        role: 'user',
-        content
-      });
-      
-      // Process message with Claude
-      const assistantResponse = await Claude.processMessage(chatId, content);
-      
-      // Save assistant message
-      const assistantMessage = await storage.createMessage({
-        chat_id: chatId,
-        role: 'assistant',
-        content: assistantResponse
-      });
-      
-      // If this is the 3rd user message, generate a title
-      const messages = await storage.getMessagesByChatId(chatId);
-      const userMessages = messages.filter(m => m.role === 'user');
-      
-      if (userMessages.length === 3) {
-        // Generate and update the title (wait for it to complete)
-        try {
-          console.log(`Generating title for chat ${chatId} after 3rd message`);
-          const title = await Claude.generateChatTitle(chatId);
-          console.log(`Generated chat title: "${title}" for chat ${chatId}`);
-        } catch (err) {
-          console.error('Error generating chat title:', err);
-        }
+      // Verify chat exists
+      const chat = await storage.getChatById(chatId);
+      if (!chat) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Chat not found' 
+        });
       }
       
-      // Only return the updated chat, not separate messages
-      return res.status(201).json({ 
-        success: true, 
-        chat: await storage.getChatById(chatId)
-      });
-    } catch (error) {
+      try {
+        // Process message with Claude (which handles deduplication)
+        console.log(`Processing message with Claude for chat ${chatId}: "${content.substring(0, 50)}..."`);
+        
+        // Try to process the message first (Claude will detect duplicates)
+        const assistantResponse = await Claude.processMessage(chatId, content);
+        
+        // If we get here, it's not a duplicate, so save the user message
+        const userMessage = await storage.createMessage({
+          chat_id: chatId,
+          role: 'user',
+          content
+        });
+        
+        // Then save assistant message
+        const assistantMessage = await storage.createMessage({
+          chat_id: chatId,
+          role: 'assistant',
+          content: assistantResponse
+        });
+        
+        // If this is the 3rd user message, generate a title
+        const messages = await storage.getMessagesByChatId(chatId);
+        const userMessages = messages.filter(m => m.role === 'user');
+        
+        if (userMessages.length === 3) {
+          // Generate and update the title (wait for it to complete)
+          try {
+            console.log(`Generating title for chat ${chatId} after 3rd message`);
+            await Claude.generateChatTitle(chatId);
+          } catch (err) {
+            console.error('Error generating chat title:', err);
+          }
+        }
+        
+        // Get updated chat data
+        const updatedChat = await storage.getChatById(chatId);
+        
+        // Only return the updated chat, not separate messages
+        return res.status(201).json({ 
+          success: true, 
+          chat: updatedChat
+        });
+      } catch (processingError: any) {
+        // Special handling for duplicate messages
+        if (processingError.message && processingError.message.includes('Duplicate message detected')) {
+          console.log(`Duplicate message detected for chat ${chatId}`);
+          return res.status(429).json({ 
+            success: false, 
+            message: processingError.message,
+            isDuplicate: true
+          });
+        }
+        
+        // Re-throw for the outer catch
+        throw processingError;
+      }
+    } catch (error: any) {
       console.error('Error creating message:', error);
-      return res.status(500).json({ success: false, message: 'Internal server error' });
+      
+      const errorMessage = error.message || 'Internal server error';
+      return res.status(500).json({ 
+        success: false, 
+        message: errorMessage
+      });
     }
   });
 

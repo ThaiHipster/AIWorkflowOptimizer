@@ -4,6 +4,7 @@ import { TextareaAutosize } from "@/components/ui/textarea-autosize";
 import { useToast } from "@/hooks/use-toast";
 import { useChat } from "@/hooks/use-chat";
 import { Loader2 } from "lucide-react";
+import { ApiError } from "@/lib/queryClient";
 
 interface ChatInputProps {
   chatId: string;
@@ -68,11 +69,28 @@ export function ChatInput({ chatId, onMessageSent, disabled = false }: ChatInput
     } catch (error: any) {
       console.error("Error sending message:", error);
       
-      // Handle server-side duplicate error specifically
+      // Handle server-side duplicate error from response
+      if (error.response) {
+        try {
+          const errorData = await error.response.json();
+          if (errorData.isDuplicate) {
+            toast({
+              title: "Message already sent",
+              description: "This message is already being processed. Please wait a moment.",
+              variant: "default",
+            });
+            return;
+          }
+        } catch (jsonError) {
+          // Ignore JSON parsing error, fall through to generic error message
+        }
+      }
+      
+      // Handle other error cases by checking message
       if (error.message && error.message.includes('Duplicate message detected')) {
         toast({
-          title: "Message already sent",
-          description: "This message is already being processed.",
+          title: "Duplicate message",
+          description: "This message is a duplicate. Please try a different message.",
           variant: "default",
         });
       } else {

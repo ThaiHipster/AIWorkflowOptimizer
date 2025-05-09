@@ -832,6 +832,8 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
   // Create implementation prompt for a specific opportunity
   public static async createImplementationPrompt(description: string): Promise<string> {
     try {
+      console.log(`Creating implementation prompt for: ${description.substring(0, 100)}...`);
+      
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
         max_tokens: 2000,
@@ -845,10 +847,21 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
         ],
       });
       
-      return response.content[0].text;
+      // Safely extract text from content
+      let prompt = "Unable to generate prompt. Please try again with a more detailed description.";
+      
+      if (response.content && response.content.length > 0) {
+        const firstBlock = response.content[0];
+        if (firstBlock.type === 'text') {
+          prompt = firstBlock.text;
+          console.log(`Generated implementation prompt of length ${prompt.length}`);
+        }
+      }
+      
+      return prompt;
     } catch (error) {
       console.error('Error creating implementation prompt:', error);
-      throw error;
+      return "An error occurred while generating the implementation prompt. Please try again.";
     }
   }
 
