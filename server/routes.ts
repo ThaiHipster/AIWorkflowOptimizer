@@ -143,11 +143,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const messages = await storage.getMessagesByChatId(chatId);
         const userMessages = messages.filter(m => m.role === 'user');
         
-        if (userMessages.length === 3) {
+        if (userMessages.length >= 3 && !chat.title) {
           // Generate and update the title (wait for it to complete)
           try {
-            console.log(`Generating title for chat ${chatId} after 3rd message`);
-            await Claude.generateChatTitle(chatId);
+            console.log(`Generating title for chat ${chatId} after ${userMessages.length} user messages`);
+            const title = await Claude.generateChatTitle(chatId);
+            console.log(`Set title to "${title}" for chat ${chatId}`);
+            
+            // Get updated chat with new title
+            const updatedChat = await storage.getChatById(chatId);
+            if (updatedChat && updatedChat.title !== 'New Workflow') {
+              console.log(`Successfully updated chat title to "${updatedChat.title}"`);
+            } else {
+              console.warn(`Failed to update chat title, still using default or unchanged`);
+            }
           } catch (err) {
             console.error('Error generating chat title:', err);
           }

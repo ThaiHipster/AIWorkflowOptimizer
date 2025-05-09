@@ -12,8 +12,9 @@ interface ChatInputProps {
   disabled?: boolean;
 }
 
-// Debounce timer (in ms)
-const DEBOUNCE_TIME = 1000;
+// Debounce timer (in ms) - set to 0 to disable client-side debounce
+// Server-side deduplication is sufficient, so we'll disable client-side
+const DEBOUNCE_TIME = 0;
 
 export function ChatInput({ chatId, onMessageSent, disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState("");

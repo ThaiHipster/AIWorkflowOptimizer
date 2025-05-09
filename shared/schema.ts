@@ -19,7 +19,7 @@ export const users = pgTable('users', {
 export const chats = pgTable('chats', {
   id: uuid('id').defaultRandom().primaryKey(),
   user_id: uuid('user_id').notNull().references(() => users.id),
-  title: text('title'),
+  title: text('title').default('New Workflow'),
   created_at: timestamp('created_at').defaultNow().notNull(),
   updated_at: timestamp('updated_at').defaultNow().notNull(),
   workflow_json: jsonb('workflow_json'),
