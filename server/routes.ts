@@ -242,6 +242,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate title for a chat
+  app.post(`${apiPrefix}/chats/:chatId/generate-title`, async (req: Request, res: Response) => {
+    try {
+      const { chatId } = req.params;
+      
+      if (!chatId) {
+        return res.status(400).json({ success: false, message: 'Chat ID is required' });
+      }
+      
+      // Generate the title
+      const title = await Claude.generateChatTitle(chatId);
+      
+      // Get the updated chat to ensure the title was saved
+      const chat = await storage.getChatById(chatId);
+      
+      return res.status(200).json({ 
+        success: true, 
+        title,
+        chat
+      });
+    } catch (error) {
+      console.error('Error generating chat title:', error);
+      return res.status(500).json({ success: false, message: 'Error generating chat title' });
+    }
+  });
+
   // Create implementation prompt for a specific opportunity
   app.post(`${apiPrefix}/create-implementation-prompt`, async (req: Request, res: Response) => {
     try {
