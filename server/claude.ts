@@ -826,8 +826,79 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
     }
   }
 
+  // Message deduplication settings
+  private static readonly processingMessages = new Map<string, Promise<string>>();
+  private static readonly recentMessages = new Map<string, number>(); // chatId+content -> timestamp
+  private static readonly MESSAGE_DEDUP_WINDOW = 10000; // 10 seconds to prevent duplicates
+  
+  // Helper method to clean up old message records
+  private static cleanupRecentMessages(): void {
+    const now = Date.now();
+    const keysToRemove: string[] = [];
+    
+    // Find old entries
+    this.recentMessages.forEach((timestamp, key) => {
+      if (now - timestamp > this.MESSAGE_DEDUP_WINDOW * 2) {
+        keysToRemove.push(key);
+      }
+    });
+    
+    // Remove old entries
+    keysToRemove.forEach(key => {
+      this.recentMessages.delete(key);
+    });
+    
+    console.log(`Cleaned up ${keysToRemove.length} old message entries`);
+  }
+  
   // Process a regular chat message (for any phase)
   public static async processMessage(chatId: string, userMessage: string): Promise<string> {
+    // Generate a unique key for this message
+    const messageKey = `${chatId}:${userMessage.substring(0, 50)}`;
+    
+    // Check if we're already processing this message
+    if (this.processingMessages.has(messageKey)) {
+      console.log(`Message already being processed: ${messageKey}`);
+      return await this.processingMessages.get(messageKey)!;
+    }
+    
+    // Check if we've recently processed the same message
+    const now = Date.now();
+    const recentKey = `${chatId}:${userMessage}`;
+    if (this.recentMessages.has(recentKey)) {
+      const timestamp = this.recentMessages.get(recentKey)!;
+      if (now - timestamp < this.MESSAGE_DEDUP_WINDOW) {
+        console.log(`Duplicate message detected within deduplication window: ${recentKey}`);
+        throw new Error('Duplicate message detected. Please wait before sending the same message again.');
+      }
+    }
+    
+    // Set timestamp for this message
+    this.recentMessages.set(recentKey, now);
+    
+    // Cleanup old entries every once in a while
+    if (this.recentMessages.size > 100) {
+      this.cleanupRecentMessages();
+    }
+    
+    // Create a promise for this message processing
+    const processingPromise = this.processMessageInternal(chatId, userMessage);
+    
+    // Register the promise so we can handle concurrent requests for the same message
+    this.processingMessages.set(messageKey, processingPromise);
+    
+    try {
+      // Wait for processing to complete
+      const result = await processingPromise;
+      return result;
+    } finally {
+      // Clean up after processing is done (success or failure)
+      this.processingMessages.delete(messageKey);
+    }
+  }
+  
+  // Internal implementation of message processing
+  private static async processMessageInternal(chatId: string, userMessage: string): Promise<string> {
     try {
       console.log(`Processing message for chat ${chatId} with content: "${userMessage.substring(0, 50)}..."`);
       
