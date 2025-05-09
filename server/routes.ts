@@ -131,10 +131,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userMessages = messages.filter(m => m.role === 'user');
       
       if (userMessages.length === 3) {
-        // Generate title asynchronously (don't wait for result)
-        Claude.generateChatTitle(chatId).catch(err => {
+        // Generate and update the title (wait for it to complete)
+        try {
+          console.log(`Generating title for chat ${chatId} after 3rd message`);
+          const title = await Claude.generateChatTitle(chatId);
+          console.log(`Generated chat title: "${title}" for chat ${chatId}`);
+        } catch (err) {
           console.error('Error generating chat title:', err);
-        });
+        }
       }
       
       // Only return the updated chat, not separate messages

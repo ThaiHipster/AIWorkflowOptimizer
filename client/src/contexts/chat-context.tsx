@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useState, useEffect, ReactNode, useRef } from "react";
 import { Chat, Message } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
@@ -128,29 +128,59 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Track ongoing message requests to prevent duplicates
+  const messageRequestsInProgress = useRef<Record<string, Promise<any>>>({});
+  
   // Send a message in the active chat
   const sendMessage = async (content: string) => {
     if (!activeChat) return;
     
-    setManualLoading(true);
-    try {
-      const res = await apiRequest("POST", `/api/chats/${activeChat.id}/messages`, { content });
-      const data = await res.json();
-      
-      if (data.success) {
-        setActiveChat(data.chat);
-        refreshChats();
-      }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({
-        title: "Error",
-        description: "Failed to send message",
-        variant: "destructive",
-      });
-    } finally {
-      setManualLoading(false);
+    // Create a unique key for this message
+    const requestKey = `${activeChat.id}:${content.substring(0, 50)}`;
+    
+    // Check if we're already processing this message
+    if (messageRequestsInProgress.current[requestKey]) {
+      console.log(`Message request already in progress: ${requestKey}`);
+      return messageRequestsInProgress.current[requestKey];
     }
+    
+    setManualLoading(true);
+    
+    // Create the promise for this request
+    const requestPromise = (async () => {
+      try {
+        console.log(`Sending message to chat ${activeChat.id}`);
+        const res = await apiRequest("POST", `/api/chats/${activeChat.id}/messages`, { content });
+        const data = await res.json();
+        
+        if (data.success) {
+          setActiveChat(data.chat);
+          // Refresh chats after a small delay to ensure the backend has processed everything
+          setTimeout(() => {
+            refreshChats();
+          }, 300);
+          return data;
+        }
+        throw new Error("Request failed");
+      } catch (error) {
+        console.error("Error sending message:", error);
+        toast({
+          title: "Error",
+          description: "Failed to send message",
+          variant: "destructive",
+        });
+        throw error;
+      } finally {
+        // Clean up after this request finishes
+        delete messageRequestsInProgress.current[requestKey];
+        setManualLoading(false);
+      }
+    })();
+    
+    // Register this promise
+    messageRequestsInProgress.current[requestKey] = requestPromise;
+    
+    return requestPromise;
   };
 
   // Generate AI suggestions for the active chat

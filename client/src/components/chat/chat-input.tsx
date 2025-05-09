@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { TextareaAutosize } from "@/components/ui/textarea-autosize";
 import { useToast } from "@/hooks/use-toast";
@@ -11,29 +11,77 @@ interface ChatInputProps {
   disabled?: boolean;
 }
 
+// Debounce timer (in ms)
+const DEBOUNCE_TIME = 1000;
+
 export function ChatInput({ chatId, onMessageSent, disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
   const { sendMessage } = useChat();
+  
+  // Track last submitted message to prevent duplicates
+  const lastMessageRef = useRef<{ text: string; timestamp: number } | null>(null);
+  
+  // Cleanup when component unmounts
+  useEffect(() => {
+    return () => {
+      lastMessageRef.current = null;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!message.trim() || isSubmitting || disabled) return;
-
+    
+    const trimmedMessage = message.trim();
+    
+    // Don't send if empty or already sending
+    if (!trimmedMessage || isSubmitting || disabled) return;
+    
+    // Check if this is a duplicate message sent within debounce window
+    const now = Date.now();
+    if (
+      lastMessageRef.current && 
+      lastMessageRef.current.text === trimmedMessage &&
+      (now - lastMessageRef.current.timestamp) < DEBOUNCE_TIME
+    ) {
+      console.log("Preventing duplicate message submission", trimmedMessage);
+      toast({
+        title: "Slow down",
+        description: "Please wait a moment before sending the same message again.",
+        variant: "default",
+      });
+      return;
+    }
+    
+    // Update last message reference
+    lastMessageRef.current = {
+      text: trimmedMessage,
+      timestamp: now
+    };
+    
     setIsSubmitting(true);
 
     try {
-      await sendMessage(message.trim());
+      await sendMessage(trimmedMessage);
       setMessage("");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending message:", error);
-      toast({
-        title: "Error",
-        description: "Failed to send message. Please try again.",
-        variant: "destructive",
-      });
+      
+      // Handle server-side duplicate error specifically
+      if (error.message && error.message.includes('Duplicate message detected')) {
+        toast({
+          title: "Message already sent",
+          description: "This message is already being processed.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to send message. Please try again.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }

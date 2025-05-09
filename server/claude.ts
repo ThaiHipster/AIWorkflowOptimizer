@@ -262,20 +262,36 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       
       const content = userMessages.map(m => m.content).join('\n');
       
+      console.log(`Generating title using ${userMessages.length} user messages from chat ${chatId}`);
+      
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
         max_tokens: 50,
         temperature: 0.7,
         system: "Generate a concise, descriptive 2-3 word title for a workflow based on these initial messages from a user. Respond with ONLY the title, no additional text or formatting.",
         messages: [
-          { role: 'user' as const, content }
+          { role: 'user', content }
         ],
       });
       
-      // Extract title from response and trim any extra whitespace or punctuation
+      // Extract title from response safely
       let title = 'New Workflow';
-      if (response.content && response.content.length > 0 && 'text' in response.content[0]) {
-        title = response.content[0].text.trim().replace(/^["']|["']$/g, '');
+      
+      // Make sure response has content blocks
+      if (response.content && response.content.length > 0) {
+        const firstBlock = response.content[0];
+        
+        // Extract text safely from the content block
+        if (firstBlock.type === 'text') {
+          title = firstBlock.text.trim().replace(/^["']|["']$/g, '');
+          console.log(`Generated title: "${title}" for chat ${chatId}`);
+        }
+      }
+      
+      // Make sure title is reasonable
+      if (title.length < 3 || title.length > 60) {
+        console.log(`Title length ${title.length} outside acceptable range, using default`);
+        title = 'New Workflow';
       }
       
       // Update the chat title in database
@@ -322,8 +338,13 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       
       // Extract and validate the response text
       let assistantResponse = "I'm working on understanding your workflow...";
-      if (response.content && response.content.length > 0 && 'text' in response.content[0]) {
-        assistantResponse = response.content[0].text;
+      
+      // Safely extract text from the content blocks
+      if (response.content && response.content.length > 0) {
+        const firstBlock = response.content[0];
+        if (firstBlock.type === 'text') {
+          assistantResponse = firstBlock.text;
+        }
       }
       
       console.log(`Received response from Claude for chat ${chatId}`);
@@ -440,8 +461,13 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       
       // Extract Mermaid syntax from response
       let mermaidSyntax = "";
-      if (response.content && response.content.length > 0 && 'text' in response.content[0]) {
-        mermaidSyntax = response.content[0].text;
+      
+      // Safely extract text from the content blocks
+      if (response.content && response.content.length > 0) {
+        const firstBlock = response.content[0];
+        if (firstBlock.type === 'text') {
+          mermaidSyntax = firstBlock.text;
+        }
       }
       
       return mermaidSyntax.replace(/```mermaid|```/g, '').trim();
@@ -911,11 +937,16 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       
       // Get chat history
       const messageHistory = await storage.getMessagesByChatId(chatId);
-      const chatHistory = messageHistory.map(msg => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content
-      }));
       
+      // Transform to the format expected by Anthropic API
+      const chatHistory = messageHistory.map(msg => {
+        return {
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        } as const;
+      });
+      
+      // Log phase for debugging
       console.log(`Current chat phase: ${chat.phase}`);
       
       // Check if this is the first user message
@@ -1007,7 +1038,17 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
               ],
             });
             
-            return response.content[0].text;
+            // Safely extract text from content
+            let reply = "I'm analyzing your workflow details";
+            
+            if (response.content && response.content.length > 0) {
+              const firstBlock = response.content[0]; 
+              if (firstBlock.type === 'text') {
+                reply = firstBlock.text;
+              }
+            }
+            
+            return reply;
           }
         
         default:
