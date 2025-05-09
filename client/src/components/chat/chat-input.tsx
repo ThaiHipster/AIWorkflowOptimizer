@@ -69,20 +69,26 @@ export function ChatInput({ chatId, onMessageSent, disabled = false }: ChatInput
     } catch (error: any) {
       console.error("Error sending message:", error);
       
-      // Handle server-side duplicate error from response
-      if (error.response) {
-        try {
-          const errorData = await error.response.json();
-          if (errorData.isDuplicate) {
-            toast({
-              title: "Message already sent",
-              description: "This message is already being processed. Please wait a moment.",
-              variant: "default",
-            });
-            return;
-          }
-        } catch (jsonError) {
-          // Ignore JSON parsing error, fall through to generic error message
+      // Handle ApiError with specific response handling
+      if (error instanceof ApiError) {
+        // Check if it's a duplicate message error (HTTP 429)
+        if (error.response.status === 429) {
+          toast({
+            title: "Message already sent",
+            description: "This message is already being processed. Please wait a moment.",
+            variant: "default",
+          });
+          return;
+        }
+        
+        // If we have responseData, use it for a more specific error message
+        if (error.responseData) {
+          toast({
+            title: "Error",
+            description: error.responseData.message || "Failed to send message",
+            variant: "destructive",
+          });
+          return;
         }
       }
       

@@ -1,6 +1,6 @@
 import { createContext, useState, useEffect, ReactNode, useRef } from "react";
 import { Chat, Message } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, ApiError } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -89,11 +89,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       return null;
     } catch (error) {
       console.error("Error loading chat:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load chat",
-        variant: "destructive",
-      });
+      
+      if (error instanceof ApiError && error.responseData?.message) {
+        toast({
+          title: "Error",
+          description: error.responseData.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load chat",
+          variant: "destructive",
+        });
+      }
       return null;
     } finally {
       setManualLoading(false);
@@ -117,11 +126,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       return null;
     } catch (error) {
       console.error("Error creating chat:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create new workflow",
-        variant: "destructive",
-      });
+      
+      if (error instanceof ApiError && error.responseData?.message) {
+        toast({
+          title: "Error",
+          description: error.responseData.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to create new workflow",
+          variant: "destructive",
+        });
+      }
       return null;
     } finally {
       setManualLoading(false);
@@ -139,7 +157,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const requestKey = `${activeChat.id}:${content.substring(0, 50)}`;
     
     // Check if we're already processing this message
-    if (messageRequestsInProgress.current[requestKey]) {
+    if (Object.prototype.hasOwnProperty.call(messageRequestsInProgress.current, requestKey)) {
       console.log(`Message request already in progress: ${requestKey}`);
       return messageRequestsInProgress.current[requestKey];
     }
@@ -164,11 +182,40 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         throw new Error("Request failed");
       } catch (error) {
         console.error("Error sending message:", error);
-        toast({
-          title: "Error",
-          description: "Failed to send message",
-          variant: "destructive",
-        });
+        
+        // Handle specific errors with better messages
+        if (error instanceof ApiError) {
+          // Check for duplicate message error
+          if (error.response.status === 429) {
+            toast({
+              title: "Duplicate Message",
+              description: "This message is already being processed",
+              variant: "default",
+            });
+          } else if (error.responseData?.message) {
+            // Use the server's specific error message when available
+            toast({
+              title: "Error",
+              description: error.responseData.message,
+              variant: "destructive",
+            });
+          } else {
+            // Generic API error
+            toast({
+              title: "Server Error",
+              description: `Error ${error.response.status}: Failed to send message`,
+              variant: "destructive",
+            });
+          }
+        } else {
+          // Generic error fallback
+          toast({
+            title: "Error",
+            description: "Failed to send message",
+            variant: "destructive",
+          });
+        }
+        
         throw error;
       } finally {
         // Clean up after this request finishes
@@ -207,11 +254,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error("Error generating AI suggestions:", error);
-      toast({
-        title: "Error",
-        description: "Failed to generate AI suggestions",
-        variant: "destructive",
-      });
+      
+      if (error instanceof ApiError && error.responseData?.message) {
+        toast({
+          title: "Error",
+          description: error.responseData.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to generate AI suggestions",
+          variant: "destructive",
+        });
+      }
     } finally {
       setManualLoading(false);
     }
