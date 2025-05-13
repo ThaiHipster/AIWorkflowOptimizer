@@ -601,7 +601,7 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       // First message setting up the context and the need to use the search tool
       const initialPrompt = `Please analyze this workflow JSON to identify AI implementation opportunities. Use the web_search tool to find current industry examples and best practices for similar workflows.\n\n${JSON.stringify(chat.workflow_json, null, 2)}`;
       
-      // Create the initial message to Claude with proper tool configuration
+      // Create the initial message to Claude with proper tool configuration and Extended Thinking Mode
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
         max_tokens: 4000,
@@ -609,7 +609,8 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
         system: this.AI_OPPORTUNITIES_SYSTEM,
         messages: [{ role: 'user', content: initialPrompt }],
         tools,
-        tool_choice: { type: "auto" }
+        tool_choice: { type: "auto" },
+        thinking: true // Enable Extended Thinking Mode for more comprehensive analysis
       });
       
       console.log(`Received initial response from Claude`);
