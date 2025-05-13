@@ -605,14 +605,14 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
         max_tokens: 4000,
-        temperature: 0.7,
+        temperature: 0.0,
         system: this.AI_OPPORTUNITIES_SYSTEM,
         messages: [{ role: 'user', content: initialPrompt }],
         tools,
         tool_choice: { type: "auto" },
         thinking: { 
           type: 'enabled',
-          budget_tokens: 2000 // Allocate 2000 tokens for Claude's internal reasoning
+          budget_tokens: 10000 // Allocate 2000 tokens for Claude's internal reasoning
         }
       });
       
