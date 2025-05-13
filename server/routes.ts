@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { Claude } from "./claude";
+import { DebugTools } from "./debug";
 import { z } from "zod";
 import { loginSchema } from "@shared/schema";
 
@@ -289,6 +290,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(500).json({ success: false, message: 'Error creating implementation prompt' });
     }
   });
+
+  // Debug routes - for testing and development only
+  if (process.env.NODE_ENV !== 'production') {
+    const debugPrefix = `${apiPrefix}/debug`;
+    
+    // Create a test chat with predefined messages
+    app.post(`${debugPrefix}/create-test-chat`, async (req: Request, res: Response) => {
+      try {
+        const { userId, messageCount } = req.body;
+        
+        if (!userId) {
+          return res.status(400).json({ success: false, message: 'User ID is required' });
+        }
+        
+        const chat = await DebugTools.createTestChat(userId, messageCount);
+        
+        return res.status(200).json({ 
+          success: true, 
+          message: 'Test chat created successfully',
+          chat
+        });
+      } catch (error) {
+        console.error('Error creating test chat:', error);
+        return res.status(500).json({ success: false, message: 'Error creating test chat' });
+      }
+    });
+    
+    // Set a chat phase
+    app.post(`${debugPrefix}/set-chat-phase`, async (req: Request, res: Response) => {
+      try {
+        const { chatId, phase } = req.body;
+        
+        if (!chatId) {
+          return res.status(400).json({ success: false, message: 'Chat ID is required' });
+        }
+        
+        if (!phase || ![1, 2, 3].includes(phase)) {
+          return res.status(400).json({ success: false, message: 'Phase must be 1, 2, or 3' });
+        }
+        
+        const chat = await DebugTools.setChatPhase(chatId, phase);
+        
+        return res.status(200).json({ 
+          success: true, 
+          message: `Chat phase set to ${phase}`,
+          chat
+        });
+      } catch (error) {
+        console.error('Error setting chat phase:', error);
+        return res.status(500).json({ success: false, message: 'Error setting chat phase' });
+      }
+    });
+    
+    // Set workflow JSON
+    app.post(`${debugPrefix}/set-workflow-json`, async (req: Request, res: Response) => {
+      try {
+        const { chatId } = req.body;
+        
+        if (!chatId) {
+          return res.status(400).json({ success: false, message: 'Chat ID is required' });
+        }
+        
+        const chat = await DebugTools.setWorkflowJson(chatId);
+        
+        return res.status(200).json({ 
+          success: true, 
+          message: 'Workflow JSON set successfully',
+          chat
+        });
+      } catch (error) {
+        console.error('Error setting workflow JSON:', error);
+        return res.status(500).json({ success: false, message: 'Error setting workflow JSON' });
+      }
+    });
+    
+    // Create a completed test chat
+    app.post(`${debugPrefix}/create-completed-chat`, async (req: Request, res: Response) => {
+      try {
+        const { userId } = req.body;
+        
+        if (!userId) {
+          return res.status(400).json({ success: false, message: 'User ID is required' });
+        }
+        
+        const chat = await DebugTools.createCompletedTestChat(userId);
+        
+        return res.status(200).json({ 
+          success: true, 
+          message: 'Completed test chat created successfully',
+          chat
+        });
+      } catch (error) {
+        console.error('Error creating completed test chat:', error);
+        return res.status(500).json({ success: false, message: 'Error creating completed test chat' });
+      }
+    });
+  }
 
   const httpServer = createServer(app);
 
