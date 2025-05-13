@@ -610,7 +610,10 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
         messages: [{ role: 'user', content: initialPrompt }],
         tools,
         tool_choice: { type: "auto" },
-        thinking: true // Enable Extended Thinking Mode for more comprehensive analysis
+        thinking: { 
+          type: 'enabled',
+          budget_tokens: 2000 // Allocate 2000 tokens for Claude's internal reasoning
+        }
       });
       
       console.log(`Received initial response from Claude`);
@@ -745,7 +748,7 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
                 }
               });
               
-              // Send the follow-up request
+              // Send the follow-up request with Extended Thinking Mode
               finalResponse = await anthropic.messages.create({
                 model: MODEL_NAME,
                 max_tokens: 4000,
@@ -753,7 +756,11 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
                 system: this.AI_OPPORTUNITIES_SYSTEM,
                 messages: messages,
                 tools,
-                tool_choice: { type: "auto" }
+                tool_choice: { type: "auto" },
+                thinking: { 
+                  type: 'enabled',
+                  budget_tokens: 2000 // Allocate 2000 tokens for Claude's internal reasoning
+                }
               });
               
               console.log('Received follow-up response from Claude');
