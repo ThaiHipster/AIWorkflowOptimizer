@@ -249,6 +249,15 @@ Your final output MUST be **only** the generated prompt text itself. Do not incl
 ## INSTRUCTION
 Now, based on the \`Opportunity Description\` you will receive, generate the implementation guidance prompt following all the requirements above. Remember to output ONLY the generated prompt text.`;
 
+  // Debug mode flag
+  private static isDebugMode = false;
+
+  // Enable/disable debug mode
+  public static setDebugMode(enabled: boolean): void {
+    this.isDebugMode = enabled;
+    console.log(`Debug mode ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
   // Generate title for a chat
   public static async generateChatTitle(chatId: string): Promise<string> {
     try {
@@ -909,7 +918,13 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       return await this.processingMessages.get(messageKey)!;
     }
     
-    // Check if we've recently processed the same message
+    // In debug mode, completely bypass all deduplication
+    if (this.isDebugMode) {
+      console.log(`Debug mode: Bypassing all message deduplication for chat ${chatId}`);
+      return await this.processMessageInternal(chatId, userMessage);
+    }
+    
+    // Normal mode - check for duplicates
     const now = Date.now();
     const recentKey = `${chatId}:${userMessage}`;
     if (this.recentMessages.has(recentKey)) {

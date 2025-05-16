@@ -7,7 +7,6 @@ const SAMPLE_WORKFLOW_CONVERSATION = [
   "BCBA Hiring",
   "Clinic manager submits a requisition to the Recruiting Team",
   "It could be any of these. Let's just keep the requisition as the start of the workflow.",
-  "Clinic manager submits a requisition to the Recruiting Team",
   "The recruiting team will post the job description to Indeed and start collecting resumes. They will also begin to search LinkedIn for BCBAs in the area of the clinic and do cold outreach to those candidates.",
   "So far, the people involved are the clinic manager who submits their acquisition, the recruiting team member who does the search work, and there would also be a Regional Vice President who has approved this requisition.",
   "The recruiting team member will screen the candidates and do intro calls with any candidate that they think may be hireable. They will then pass on the top candidate to the clinic manager to schedule an in-person interview with the clinic manager.",
@@ -133,6 +132,9 @@ export class DebugTools {
    */
   static async createTestChat(userId: string, messageCount: number = SAMPLE_WORKFLOW_CONVERSATION.length): Promise<any> {
     try {
+      // Enable debug mode
+      Claude.setDebugMode(true);
+      
       // Create a new chat
       const chat = await storage.createChat(userId);
       console.log(`Created test chat ${chat.id} for user ${userId}`);
@@ -176,9 +178,14 @@ export class DebugTools {
         console.log(`Generated title "${title}" for chat ${chat.id}`);
       }
       
+      // Disable debug mode
+      Claude.setDebugMode(false);
+      
       // Return the updated chat
       return await storage.getChatById(chat.id);
     } catch (error) {
+      // Make sure to disable debug mode even if there's an error
+      Claude.setDebugMode(false);
       console.error('Error creating test chat:', error);
       throw error;
     }
@@ -232,6 +239,9 @@ export class DebugTools {
    */
   static async createCompletedTestChat(userId: string): Promise<any> {
     try {
+      // Enable debug mode before starting any operations
+      Claude.setDebugMode(true);
+      
       // Create chat with all messages
       const chat = await this.createTestChat(userId);
       
@@ -257,6 +267,9 @@ export class DebugTools {
     } catch (error) {
       console.error('Error creating completed test chat:', error);
       throw error;
+    } finally {
+      // Always disable debug mode when done
+      Claude.setDebugMode(false);
     }
   }
 }
