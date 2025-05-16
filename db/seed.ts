@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 import { db } from "./index";
 import * as schema from "@shared/schema";
 import { v4 as uuidv4 } from "uuid";
