@@ -6,6 +6,8 @@ import { formatDistanceToNow } from "date-fns";
 import { Chat } from "@shared/schema";
 import { useMobile } from "@/hooks/use-mobile";
 import { useChat } from "@/hooks/use-chat";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ChatHistoryProps {
   className?: string;
@@ -16,6 +18,23 @@ export function ChatHistory({ className }: ChatHistoryProps) {
   const isMobile = useMobile();
   const { chats, activeChat, isLoading, setActiveChat, createNewChat } = useChat();
 
+  // Additional query for real-time updates
+  const { data: realtimeChats = chats } = useQuery({
+    queryKey: ['/api/chats/realtime'],
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", "/api/chats/realtime");
+        const data = await res.json();
+        return data.success ? data.chats : chats;
+      } catch (error) {
+        console.error("Error fetching realtime chats:", error);
+        return chats;
+      }
+    },
+    refetchInterval: 2000, // Refetch every 2 seconds
+    refetchOnWindowFocus: true,
+  });
+
   const toggleSidebar = () => {
     setIsOpen(!isOpen);
   };
@@ -25,7 +44,7 @@ export function ChatHistory({ className }: ChatHistoryProps) {
   };
 
   const handleChatSelect = (chatId: string) => {
-    const selectedChat = chats.find((chat) => chat.id === chatId);
+    const selectedChat = realtimeChats.find((chat: Chat) => chat.id === chatId);
     if (selectedChat) {
       setActiveChat(selectedChat);
     }
@@ -92,7 +111,7 @@ export function ChatHistory({ className }: ChatHistoryProps) {
           </div>
 
           <div className="py-2 overflow-y-auto max-h-[calc(100vh-140px)]">
-            {chats.map((chat) => (
+            {realtimeChats.map((chat: Chat) => (
               <button
                 key={chat.id}
                 onClick={() => handleChatSelect(chat.id)}
@@ -126,7 +145,7 @@ export function ChatHistory({ className }: ChatHistoryProps) {
               </button>
             ))}
 
-            {chats.length === 0 && (
+            {realtimeChats.length === 0 && (
               <div className="px-4 py-8 text-center text-muted-foreground">
                 <p>No workflow history yet</p>
                 <p className="text-sm mt-2">
@@ -163,7 +182,7 @@ export function ChatHistory({ className }: ChatHistoryProps) {
       </div>
 
       <div className="py-2">
-        {chats.map((chat) => (
+        {realtimeChats.map((chat: Chat) => (
           <button
             key={chat.id}
             onClick={() => handleChatSelect(chat.id)}
@@ -197,7 +216,7 @@ export function ChatHistory({ className }: ChatHistoryProps) {
           </button>
         ))}
 
-        {chats.length === 0 && (
+        {realtimeChats.length === 0 && (
           <div className="px-4 py-8 text-center text-muted-foreground">
             <p>No workflow history yet</p>
             <p className="text-sm mt-2">

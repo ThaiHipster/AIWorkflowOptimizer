@@ -4,6 +4,8 @@ import { CreatePromptButton } from "@/components/chat/create-prompt-button";
 import { ViewDiagramButton } from "@/components/chat/view-diagram-button";
 import { Message } from "@shared/schema";
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ChatMessageProps {
   message: Message;
@@ -21,82 +23,38 @@ export function ChatMessage({
   onViewDiagram
 }: ChatMessageProps) {
   const isUser = message.role === "user";
-  const [aiOpportunities, setAiOpportunities] = useState<{ description: string, index: number }[]>([]);
-  const [selectedOpportunity, setSelectedOpportunity] = useState<string | null>(null);
-  
-  // Check if message contains an implementation prompt section
-  const hasImplementationPrompt = message.content.includes("Implementation Prompt:") && 
-                                 !isUser;
-  
-  // Check if message asks about viewing diagram
-  const hasViewDiagramOption = message.content.includes("View Diagram") &&
-                              !isUser &&
-                              message.content.includes("workflow diagram");
-  
-  // Check if message contains AI suggestions table
-  const hasAiSuggestions = !isUser && 
-                          (message.content.includes("| Step/Pain-point | Opportunity | Description |") ||
-                           message.content.includes("| Opportunity | Description | Complexity |"));
-  
-  // Extract the implementation prompt section if it exists
-  const extractPrompt = (content: string) => {
-    const promptRegex = /Implementation Prompt:[\s\S]*?(?=\n\n|$)/;
-    const match = content.match(promptRegex);
-    return match ? match[0] : "";
-  };
-  
-  // Extract AI opportunities from the message content
-  useEffect(() => {
-    if (hasAiSuggestions) {
-      // Regular expression to match markdown table rows
-      const rowRegex = /\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|/g;
-      const content = message.content;
-      
-      const opportunities: { description: string, index: number }[] = [];
-      let match;
-      let index = 0;
-      
-      // Skip the header row and separator row by starting the index at 2
-      let rowCount = 0;
-      
-      while ((match = rowRegex.exec(content)) !== null) {
-        rowCount++;
-        // Skip header and separator rows (first 2 rows typically)
-        if (rowCount <= 2) continue;
-        
-        // Get opportunity name and description from the row
-        // Format can be either:
-        // | Step/Pain-point | Opportunity | Description | ...
-        // or
-        // | Opportunity | Description | Complexity | ...
-        
-        let opportunityName, description;
-        
-        if (content.includes("| Step/Pain-point | Opportunity | Description |")) {
-          // Format: | Step/Pain-point | Opportunity | Description | ...
-          opportunityName = match[2].trim();
-          description = match[3].trim();
-        } else {
-          // Format: | Opportunity | Description | Complexity | ...
-          opportunityName = match[1].trim();
-          description = match[2].trim();
-        }
-        
-        // Combine name and description
-        const fullDescription = `${opportunityName}: ${description}`;
-        
-        opportunities.push({
-          description: fullDescription,
-          index: index++
-        });
+  const [localMessage, setLocalMessage] = useState(message);
+
+  // Query for real-time message updates
+  const { data: updatedMessage } = useQuery({
+    queryKey: ['/api/chats', chatId, 'messages', message.id],
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", `/api/chats/${chatId}/messages/${message.id}`);
+        const data = await res.json();
+        return data.success ? data.message : message;
+      } catch (error) {
+        console.error("Error fetching message update:", error);
+        return message;
       }
-      
-      setAiOpportunities(opportunities);
+    },
+    refetchInterval: 2000, // Refetch every 2 seconds
+    refetchOnWindowFocus: true,
+  });
+
+  // Update local message when new data arrives
+  useEffect(() => {
+    if (updatedMessage) {
+      setLocalMessage(updatedMessage);
     }
-  }, [message.content, hasAiSuggestions]);
-  
-  const prompt = hasImplementationPrompt ? extractPrompt(message.content) : 
-                 selectedOpportunity ? `Implementation Prompt: ${selectedOpportunity}` : "";
+  }, [updatedMessage]);
+
+  // Check if this message has the view diagram option
+  const hasViewDiagramOption = 
+    !isUser && 
+    isLastMessage && 
+    localMessage.content.toLowerCase().includes("diagram") &&
+    localMessage.content.toLowerCase().includes("generated");
 
   return (
     <div
@@ -135,10 +93,10 @@ export function ChatMessage({
         )}
       >
         {isUser ? (
-          <p className="whitespace-pre-wrap text-gray-800 leading-relaxed">{message.content}</p>
+          <p className="whitespace-pre-wrap text-gray-800 leading-relaxed">{localMessage.content}</p>
         ) : (
           <div className="markdown overflow-hidden">
-            <Markdown content={message.content} className="text-sm sm:text-base" />
+            <Markdown content={localMessage.content} className="text-sm sm:text-base" />
           </div>
         )}
         
@@ -150,51 +108,15 @@ export function ChatMessage({
         )}
         
         {/* Create Prompt Buttons for AI Suggestions */}
-        {hasAiSuggestions && aiOpportunities.length > 0 && (
+        {!isUser && localMessage.content.includes("| Step/Pain-point |") && (
           <div className="mt-5 pt-4 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Generate implementation prompt for:</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {aiOpportunities.map((opportunity) => (
-                <button
-                  key={opportunity.index}
-                  className={cn(
-                    "text-left px-3.5 py-2.5 rounded-md text-sm hover:bg-gray-100 border transition-colors duration-200 ease-in-out",
-                    selectedOpportunity === opportunity.description
-                      ? "bg-primary-50 border-primary-200 text-primary-700"
-                      : "bg-gray-50 border-gray-200 text-gray-700"
-                  )}
-                  onClick={() => setSelectedOpportunity(opportunity.description)}
-                >
-                  {opportunity.description.length > 50 
-                    ? opportunity.description.substring(0, 50) + '...' 
-                    : opportunity.description}
-                </button>
-              ))}
-            </div>
-            
-            {selectedOpportunity && (
-              <div className="mt-4">
-                <CreatePromptButton prompt={`Implementation Prompt: ${selectedOpportunity}`} />
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Create Prompt Button for existing prompt */}
-        {hasImplementationPrompt && (
-          <div className="mt-5 pt-4 border-t border-gray-200">
-            <CreatePromptButton prompt={prompt} />
+            <CreatePromptButton 
+              chatId={chatId}
+              messageContent={localMessage.content}
+            />
           </div>
         )}
       </div>
-
-      {isUser && (
-        <div className="flex-shrink-0 ml-3">
-          <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-700 font-medium">
-            {userInitials}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -795,6 +795,19 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
         
         // Combine all text blocks
         aiSuggestions = textBlocks.map(block => 'text' in block ? block.text : '').join('\n\n');
+
+        // --- Post-process to clean up markdown table output ---
+        if (aiSuggestions) {
+          // Find the first table (first line starting with '|')
+          const tableStart = aiSuggestions.indexOf('|');
+          if (tableStart !== -1) {
+            aiSuggestions = aiSuggestions.slice(tableStart);
+            // Ensure header/separator and first row are separated by a newline
+            aiSuggestions = aiSuggestions.replace(/(\|[-| ]+\|)\s*(\|)/, '$1\n$2');
+            // Optionally, trim trailing whitespace
+            aiSuggestions = aiSuggestions.trim();
+          }
+        }
       }
       
       console.error('Claude final response content:', JSON.stringify(finalResponse, null, 2));

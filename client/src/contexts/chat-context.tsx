@@ -35,7 +35,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  // Fetch user's chats
+  // Fetch user's chats with automatic refetching
   const { 
     data: chats = [], 
     isLoading: isChatsLoading, 
@@ -54,10 +54,42 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     },
     enabled: !!user,
+    refetchInterval: 5000, // Refetch every 5 seconds
+    refetchOnWindowFocus: true, // Refetch when window regains focus
   });
-  
+
+  // Query for active chat with automatic refetching
+  const { 
+    data: activeChatData,
+    isLoading: isActiveChatLoading,
+    refetch: refetchActiveChat
+  } = useQuery({
+    queryKey: ['/api/chats', activeChat?.id],
+    queryFn: async () => {
+      if (!activeChat?.id) return null;
+      try {
+        const res = await apiRequest("GET", `/api/chats/${activeChat.id}`);
+        const data = await res.json();
+        return data.success ? data.chat : null;
+      } catch (error) {
+        console.error("Error fetching active chat:", error);
+        return null;
+      }
+    },
+    enabled: !!activeChat?.id,
+    refetchInterval: 2000, // Refetch every 2 seconds
+    refetchOnWindowFocus: true,
+  });
+
+  // Update active chat when data changes
+  useEffect(() => {
+    if (activeChatData) {
+      setActiveChat(activeChatData);
+    }
+  }, [activeChatData]);
+
   // Keep track of overall loading state
-  const isLoading = isChatsLoading || manualLoading;
+  const isLoading = isChatsLoading || isActiveChatLoading || manualLoading;
 
   // Clear active chat when user logs out
   useEffect(() => {
@@ -119,7 +151,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
       
       if (data.success) {
-        await refreshChats();
+        await refetchChats(); // Use refetchChats instead of refreshChats
         setActiveChat(data.chat);
         return data.chat;
       }
@@ -173,58 +205,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         
         if (data.success) {
           setActiveChat(data.chat);
-          // Refresh chats after a small delay to ensure the backend has processed everything
-          setTimeout(() => {
-            refreshChats();
-          }, 300);
+          // Invalidate and refetch both the chats list and active chat
+          await Promise.all([
+            refetchChats(),
+            refetchActiveChat()
+          ]);
           return data;
         }
         throw new Error("Request failed");
       } catch (error) {
         console.error("Error sending message:", error);
-        
-        // Handle specific errors with better messages
-        if (error instanceof ApiError) {
-          // Check for duplicate message error
-          if (error.response.status === 429) {
-            toast({
-              title: "Duplicate Message",
-              description: "This message is already being processed",
-              variant: "default",
-            });
-          } else if (error.responseData?.message) {
-            // Use the server's specific error message when available
-            toast({
-              title: "Error",
-              description: error.responseData.message,
-              variant: "destructive",
-            });
-          } else {
-            // Generic API error
-            toast({
-              title: "Server Error",
-              description: `Error ${error.response.status}: Failed to send message`,
-              variant: "destructive",
-            });
-          }
-        } else {
-          // Generic error fallback
-          toast({
-            title: "Error",
-            description: "Failed to send message",
-            variant: "destructive",
-          });
-        }
-        
         throw error;
       } finally {
-        // Clean up after this request finishes
-        delete messageRequestsInProgress.current[requestKey];
         setManualLoading(false);
+        delete messageRequestsInProgress.current[requestKey];
       }
     })();
     
-    // Register this promise
+    // Store the promise
     messageRequestsInProgress.current[requestKey] = requestPromise;
     
     return requestPromise;
@@ -247,10 +245,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             content: data.chat.ai_suggestions_markdown 
           });
           
-          await loadChatById(activeChat.id);
+          // Invalidate and refetch both the chats list and active chat
+          await Promise.all([
+            refetchChats(),
+            refetchActiveChat()
+          ]);
         }
-        
-        refreshChats();
       }
     } catch (error) {
       console.error("Error generating AI suggestions:", error);
