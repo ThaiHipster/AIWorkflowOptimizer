@@ -108,13 +108,13 @@ export const storage = {
     }
   },
 
-  async createChat(userId: string): Promise<Chat> {
+  async createChat(userId: string, title?: string): Promise<Chat> {
     try {
       const chatId = uuidv4();
       const [chat] = await db.insert(chats).values({
         id: chatId,
         user_id: userId,
-        title: 'New Workflow'
+        title: title || 'New Workflow'
       }).returning();
       return chat;
     } catch (error) {

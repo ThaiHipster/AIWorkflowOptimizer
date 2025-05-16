@@ -120,3 +120,19 @@ The application follows a client-server architecture with three main layers:
 - [shadcn/ui](https://ui.shadcn.com/) - UI component library
 - [TailwindCSS](https://tailwindcss.com/) - CSS framework
 - [Drizzle ORM](https://orm.drizzle.team/) - Database ORM
+
+## To do
+- 1. Name the test chats and increment up with each of the same tests
+- 2. Have a way to get the test chats ID from the chat window
+- 3. Have the phase selection dropdown automatically set the phase
+- 4. Have the phase selection actually change the phases
+- 5. Remove Set workflow JSON
+- 6. Fix this error for testing the complete chat
+  request_id: 'req_011CPBkUYwmWWQ3ABotHjxiL',
+  error: {
+    type: 'error',
+    error: {
+      type: 'invalid_request_error',
+      message: '`temperature` may only be set to 1 when thinking is enabled. Please consult our documentation at https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking'
+    }
+  }

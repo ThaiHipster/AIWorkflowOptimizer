@@ -1,6 +1,13 @@
 import { storage } from './storage';
 import { Claude } from './claude';
 import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get the directory name using import.meta.url
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Sample workflow conversation - each array element represents a user message
 const SAMPLE_WORKFLOW_CONVERSATION = [
@@ -123,6 +130,24 @@ const SAMPLE_WORKFLOW_JSON = {
   ]
 };
 
+// Helper to get and increment the persistent test chat counter
+async function getNextTestChatNumber(): Promise<number> {
+  const counterPath = path.join(__dirname, 'test_chat_counter.json');
+  let counter = 1;
+  try {
+    if (fs.existsSync(counterPath)) {
+      const data = fs.readFileSync(counterPath, 'utf-8');
+      counter = JSON.parse(data).counter + 1;
+    }
+    fs.writeFileSync(counterPath, JSON.stringify({ counter }), 'utf-8');
+  } catch (err) {
+    // fallback to 1 if error
+    counter = 1;
+    fs.writeFileSync(counterPath, JSON.stringify({ counter }), 'utf-8');
+  }
+  return counter;
+}
+
 export class DebugTools {
   /**
    * Create a sample chat with pre-defined messages for testing
@@ -132,59 +157,41 @@ export class DebugTools {
    */
   static async createTestChat(userId: string, messageCount: number = SAMPLE_WORKFLOW_CONVERSATION.length): Promise<any> {
     try {
-      // Enable debug mode
       Claude.setDebugMode(true);
-      
-      // Create a new chat
-      const chat = await storage.createChat(userId);
-      console.log(`Created test chat ${chat.id} for user ${userId}`);
-      
-      // Prepare for message exchange
+      // Use persistent counter for test chat number
+      const nextNumber = await getNextTestChatNumber();
+      const testChatTitle = `Test Chat ${nextNumber}`;
+      // Update the sample workflow JSON title for this chat
+      const workflowJson = { ...SAMPLE_WORKFLOW_JSON, title: testChatTitle };
+      // Create a new chat with the unique test title
+      const chat = await storage.createChat(userId, testChatTitle);
+      console.log(`Created test chat ${chat.id} for user ${userId} with title '${testChatTitle}'`);
       let chatHistory: Array<{role: string, content: string}> = [];
-      
-      // Add messages up to the requested count
       const messagesToAdd = SAMPLE_WORKFLOW_CONVERSATION.slice(0, messageCount);
-      
       for (const userMessage of messagesToAdd) {
-        console.log(`Adding test message to chat ${chat.id}: "${userMessage.substring(0, 30)}..."`);
-        
-        // Save user message
         await storage.createMessage({
           chat_id: chat.id,
           role: 'user',
           content: userMessage
         });
-        
-        // Add to chat history for context
         chatHistory.push({ role: 'user', content: userMessage });
-        
-        // Generate assistant response
         const assistantResponse = await Claude.processMessage(chat.id, userMessage);
-        
-        // Save assistant message
         await storage.createMessage({
           chat_id: chat.id,
           role: 'assistant',
           content: assistantResponse
         });
-        
-        // Add to chat history for context
         chatHistory.push({ role: 'assistant', content: assistantResponse });
       }
-      
-      // Generate title if we've added enough messages
+      // Set the workflow JSON for this chat
+      await storage.updateWorkflowJson(chat.id, workflowJson);
       if (messageCount >= 3) {
         const title = await Claude.generateChatTitle(chat.id);
         console.log(`Generated title "${title}" for chat ${chat.id}`);
       }
-      
-      // Disable debug mode
       Claude.setDebugMode(false);
-      
-      // Return the updated chat
       return await storage.getChatById(chat.id);
     } catch (error) {
-      // Make sure to disable debug mode even if there's an error
       Claude.setDebugMode(false);
       console.error('Error creating test chat:', error);
       throw error;
@@ -258,6 +265,15 @@ export class DebugTools {
       try {
         await Claude.suggestAiOpportunities(chat.id);
         console.log(`Generated AI suggestions for chat ${chat.id}`);
+        // Insert AI suggestions as a message if present
+        const updatedChat = await storage.getChatById(chat.id);
+        if (updatedChat && updatedChat.ai_suggestions_markdown) {
+          await storage.createMessage({
+            chat_id: chat.id,
+            role: 'assistant',
+            content: updatedChat.ai_suggestions_markdown
+          });
+        }
       } catch (error) {
         console.error(`Error generating AI suggestions for chat ${chat.id}:`, error);
       }
