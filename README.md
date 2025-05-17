@@ -70,14 +70,19 @@ An AI-powered workflow analysis and optimization platform that transforms comple
 
 6. Open your browser and navigate to `http://localhost:5000`
 
-## 🧪 Development & Testing
+## ⛠ Developer Tools
 
-The application includes built-in developer tools for testing:
+The application includes a Debug Panel that is only available when the `NODE_ENV` environment variable is not set to `production`. Running `npm run dev` will start the server in this mode and the panel appears in the bottom-right corner.
 
-- **Developer Debug Panel**: Access by clicking the "Developer Tools" button in the bottom-right corner
-- **Test Data Generation**: Create test chats with predefined BCBA hiring workflow
-- **Phase Simulation**: Test different phases of the workflow process
-- **API Endpoints**: Debug endpoints for testing specific functionality
+### Debug Panel
+- Quickly create test chats, set chat phases, and fill in sample workflow data.
+
+### Debug API
+- `POST /api/debug/create-test-chat` – create a chat with predefined messages. Body: `{ userId, messageCount }`
+- `POST /api/debug/set-chat-phase` – set the current phase of a chat (1, 2, or 3). Body: `{ chatId, phase }`
+- `POST /api/debug/set-workflow-json` – add sample workflow JSON to a chat. Body: `{ chatId }`
+- `POST /api/debug/create-completed-chat` – generate a completed sample chat with AI suggestions. Body: `{ userId }`
+
 
 ## 📊 System Architecture
 
