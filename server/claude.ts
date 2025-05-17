@@ -611,9 +611,9 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
         messages: [{ role: 'user', content: initialPrompt }],
         tools,
         tool_choice: { type: "auto" },
-        thinking: { 
+        thinking: {
           type: 'enabled',
-          budget_tokens: 10000 // Allocate 2000 tokens for Claude's internal reasoning
+          budget_tokens: 10000 // Allocate 10000 tokens for Claude's internal reasoning
         }
       });
       
