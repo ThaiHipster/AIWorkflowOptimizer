@@ -12,6 +12,7 @@ import {
 } from '@shared/schema';
 import { eq, and, desc, asc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { DEFAULT_CHAT_TITLE } from '@shared/constants';
 
 // User operations
 export const storage = {
@@ -114,7 +115,7 @@ export const storage = {
       const [chat] = await db.insert(chats).values({
         id: chatId,
         user_id: userId,
-        title: 'New Workflow'
+        title: DEFAULT_CHAT_TITLE
       }).returning();
       return chat;
     } catch (error) {
