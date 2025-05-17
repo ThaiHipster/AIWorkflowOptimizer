@@ -108,6 +108,7 @@ The application follows a client-server architecture with three main layers:
 - `SEARCH_API_KEY`: API key for web search functionality (optional)
 - `SEARCH_ENGINE`: Search engine to use (default: 'serper', alternative: 'google')
 - `GOOGLE_SEARCH_ENGINE_ID`: Required if using Google search engine
+- `SESSION_SECRET`: Secret key for signing session cookies
 
 ## 📄 License
 
