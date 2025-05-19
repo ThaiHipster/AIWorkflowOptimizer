@@ -121,18 +121,93 @@ The application follows a client-server architecture with three main layers:
 - [TailwindCSS](https://tailwindcss.com/) - CSS framework
 - [Drizzle ORM](https://orm.drizzle.team/) - Database ORM
 
+## Ideal End State
+1. Deployed app
+2. Someone can start a new chat and work through the conversation phase, the diagram phase, and the diagnosis phase and get an AI output
+3. You can easily test each of the stages using a set of testing buttons
+   a. Dropdown set of phase selection elements
+   b. Test chat button
+4. The app can be easily edited by Chad on Lovable, Repit, etc.
+
+## Missing Features
+1. Debug Features
+2. Deployment
+
+
 ## To do
-- 1. Name the test chats and increment up with each of the same tests
-- 2. Have a way to get the test chats ID from the chat window
-- 3. Have the phase selection dropdown automatically set the phase
-- 4. Have the phase selection actually change the phases
-- 5. Remove Set workflow JSON
-- 6. Fix this error for testing the complete chat
-  request_id: 'req_011CPBkUYwmWWQ3ABotHjxiL',
-  error: {
-    type: 'error',
-    error: {
-      type: 'invalid_request_error',
-      message: '`temperature` may only be set to 1 when thinking is enabled. Please consult our documentation at https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking'
-    }
-  }
+
+### Debug Features
+[] Update the debug pannel view
+      Labeled "1. New Test Chat"
+      On click:
+      Calls the existing createTestChat() method
+      Adds the new chat to the visible list of chats
+      Opens the new chat in the main window
+   3. Phase Selector – Multi-Select Buttons
+      Vertically stacked buttons labeled 1, 2, and 3 (for Phases 1–3)
+      Each button acts as a toggle
+      Can be multi-selected
+      UI state: pressed = selected, default = unselected
+      On click: update internal selectedPhases: number[] state
+   4. "Test" Button Behavior
+      Central button labeled "Test"
+      On click:
+      For each selectedPhase in selectedPhases, call setChatPhase(chatId, phaseX)
+      Must only run if a current chat is selected
+      Can optionally show a toast or visual confirmation for each phase triggered
+   5. Integration & Visibility
+      This new debug panel:
+      Replaces the current Developer Debug Tools panel
+      Is hidden by default
+      Can be toggled on via a new toggle switch/button in the main UI
+[] Update the debug pannel view
+   [] Top Section – Current Chat Display
+   [] Primary Action – "1. New Test Chat" Button
+       [] New Chat Creates a new imediate chat with the first phase selected
+   [] Phase Selector – Multi-Select Buttons
+       [] Move the phase selections to the left and have them be a 
+   [] Test Button Behavior
+       [] Once the phase is selected it should set the phase to test
+[] Name the test chats with a test and number prefix and increment up with each of the same tests
+[] Have a way to get the test chats ID from the chat window
+
+### Deployment
+
+## 📋 Deployment Checklist
+
+- [x] **Vercel Account Setup**
+  - [x] Create Vercel account if needed
+  - [x] Install Vercel CLI globally (`npm install -g vercel`)
+  - [x] Login to Vercel CLI (`vercel login`)
+
+- [ ] **Project Preparation**
+  - [x] Ensure all dependencies are correctly listed in `package.json`
+  - [x] Verify build script works locally (`npm run build`)
+  - [x] Check for any hardcoded local URLs/paths
+  - [x] Test production build locally
+
+- [ ] **Environment Variables**
+  - [x] List all required environment variables:
+    - [x] `DATABASE_URL`
+    - [x] `ANTHROPIC_API_KEY`
+    - [x] `SEARCH_API_KEY`
+    - [x] `SEARCH_ENGINE`
+
+- [ ] **Database Setup**
+  - [ ] Set up production PostgreSQL database
+  - [ ] Run database migrations
+  - [ ] Test database connection with production credentials
+d
+- [ ] **Deployment Configuration**
+  - [ ] Configure build settings in Vercel
+  - [ ] Set up environment variables in Vercel dashboard
+  - [ ] Configure custom domain (if needed)
+  - [ ] Set up automatic deployments from main branch
+
+- [ ] **Post-Deployment**
+  - [ ] Test all features on deployed version
+  - [ ] Verify API endpoints
+  - [ ] Check database connections
+  - [ ] Test authentication flow
+  - [ ] Verify environment variables are working
+  - [ ] Test debug features

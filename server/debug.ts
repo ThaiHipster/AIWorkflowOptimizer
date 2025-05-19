@@ -185,9 +185,13 @@ export class DebugTools {
       }
       // Set the workflow JSON for this chat
       await storage.updateWorkflowJson(chat.id, workflowJson);
+      let workflowTitle = '';
       if (messageCount >= 3) {
-        const title = await Claude.generateChatTitle(chat.id);
-        console.log(`Generated title "${title}" for chat ${chat.id}`);
+        workflowTitle = await Claude.generateChatTitle(chat.id);
+        console.log(`Generated title "${workflowTitle}" for chat ${chat.id}`);
+        // Compose the new title as (Test Chat N) <workflow title>
+        const combinedTitle = `(${testChatTitle}) ${workflowTitle}`;
+        await storage.updateChatTitle(chat.id, combinedTitle);
       }
       Claude.setDebugMode(false);
       return await storage.getChatById(chat.id);
