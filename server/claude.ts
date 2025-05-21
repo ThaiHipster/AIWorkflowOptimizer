@@ -6,6 +6,7 @@ import {
   Tool
 } from '@anthropic-ai/sdk/resources';
 import { storage } from './storage';
+import { DEFAULT_CHAT_TITLE } from '@shared/constants';
 import { WebSearch } from './websearch';
 
 // The newest Anthropic model is "claude-3-7-sonnet-20250219" which was released February 24, 2025
@@ -257,7 +258,7 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       const userMessages = messages.filter(m => m.role === 'user').slice(0, 3);
       
       if (userMessages.length === 0) {
-        return 'New Workflow';
+        return DEFAULT_CHAT_TITLE;
       }
       
       const content = userMessages.map(m => m.content).join('\n');
@@ -275,7 +276,7 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       });
       
       // Extract title from response safely
-      let title = 'New Workflow';
+      let title = DEFAULT_CHAT_TITLE;
       
       // Make sure response has content blocks
       if (response.content && response.content.length > 0) {
@@ -291,16 +292,16 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       // Make sure title is reasonable
       if (title.length < 3 || title.length > 60) {
         console.log(`Title length ${title.length} outside acceptable range, using default`);
-        title = 'New Workflow';
+        title = DEFAULT_CHAT_TITLE;
       }
       
       // Update the chat title in database
       await storage.updateChatTitle(chatId, title);
-      
+
       return title;
     } catch (error) {
       console.error('Error generating chat title:', error);
-      return 'New Workflow';
+      return DEFAULT_CHAT_TITLE;
     }
   }
 
@@ -610,9 +611,9 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
         messages: [{ role: 'user', content: initialPrompt }],
         tools,
         tool_choice: { type: "auto" },
-        thinking: { 
+        thinking: {
           type: 'enabled',
-          budget_tokens: 10000 // Allocate 2000 tokens for Claude's internal reasoning
+          budget_tokens: 10000 // Allocate 10000 tokens for Claude's internal reasoning
         }
       });
       

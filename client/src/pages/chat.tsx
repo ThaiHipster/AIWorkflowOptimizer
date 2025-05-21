@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/hooks/use-chat";
 import { Button } from "@/components/ui/button";
+import { DEFAULT_CHAT_TITLE } from "@shared/constants";
 
 export default function ChatPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -105,7 +106,7 @@ export default function ChatPage() {
               <div className="bg-white p-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-medium text-gray-900">
-                    {activeChat.title || "New Workflow"}
+                    {activeChat.title || DEFAULT_CHAT_TITLE}
                   </h2>
                   <div className="flex space-x-2">
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-100 text-primary-800">
@@ -217,7 +218,7 @@ export default function ChatPage() {
                   onClick={handleNewChat}
                   className="bg-primary-600 hover:bg-primary-700"
                 >
-                  Start New Workflow
+                  Start {DEFAULT_CHAT_TITLE}
                 </Button>
               </div>
             </div>

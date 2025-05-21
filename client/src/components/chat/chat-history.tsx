@@ -4,6 +4,7 @@ import { PlusIcon, X, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { Chat } from "@shared/schema";
+import { DEFAULT_CHAT_TITLE } from "@shared/constants";
 import { useMobile } from "@/hooks/use-mobile";
 import { useChat } from "@/hooks/use-chat";
 
@@ -87,7 +88,7 @@ export function ChatHistory({ className }: ChatHistoryProps) {
               className="w-full bg-primary text-white hover:bg-primary/90"
             >
               <PlusIcon className="h-5 w-5 mr-2" />
-              New Workflow
+              {DEFAULT_CHAT_TITLE}
             </Button>
           </div>
 
@@ -106,7 +107,7 @@ export function ChatHistory({ className }: ChatHistoryProps) {
                 <div className="flex items-start justify-between">
                   <div className="overflow-hidden">
                     <h3 className="text-sm font-medium text-foreground truncate max-w-[180px]">
-                      {chat.title || "New Workflow"}
+                      {chat.title || DEFAULT_CHAT_TITLE}
                     </h3>
                     <p className="text-xs text-muted-foreground mt-1">
                       {formatChatDate(chat.created_at)}
@@ -158,7 +159,7 @@ export function ChatHistory({ className }: ChatHistoryProps) {
           className="w-full"
         >
           <PlusIcon className="h-5 w-5 mr-2" />
-          New Workflow
+          {DEFAULT_CHAT_TITLE}
         </Button>
       </div>
 
@@ -177,7 +178,7 @@ export function ChatHistory({ className }: ChatHistoryProps) {
             <div className="flex items-start justify-between">
               <div className="overflow-hidden">
                 <h3 className="text-sm font-medium text-foreground truncate max-w-[180px]">
-                  {chat.title || "New Workflow"}
+                  {chat.title || DEFAULT_CHAT_TITLE}
                 </h3>
                 <p className="text-xs text-muted-foreground mt-1">
                   {formatChatDate(chat.created_at)}
