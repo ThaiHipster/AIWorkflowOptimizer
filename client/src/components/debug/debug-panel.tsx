@@ -17,12 +17,15 @@ export function DebugPanel() {
   const [phase, setPhase] = useState('1');
   const [isLoading, setIsLoading] = useState(false);
 
-  if (!user || process.env.NODE_ENV === 'production') {
-    return null;
-  }
-
   const handleCreateTestChat = async () => {
-    if (!user) return;
+    if (!user) {
+      toast({
+        title: 'User required',
+        description: 'You need to be logged in to create a test chat',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -141,7 +144,14 @@ export function DebugPanel() {
   };
 
   const handleCreateCompletedChat = async () => {
-    if (!user) return;
+    if (!user) {
+      toast({
+        title: 'User required',
+        description: 'You need to be logged in to create a completed chat',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -177,11 +187,12 @@ export function DebugPanel() {
 
   if (!isExpanded) {
     return (
-      <div className="fixed bottom-4 right-4 z-50">
+      <div className="fixed bottom-4 right-4 z-[100]">
         <Button 
           onClick={() => setIsExpanded(true)}
           variant="secondary"
           size="sm"
+          className="shadow-lg border border-gray-300 bg-opacity-90 backdrop-blur-sm"
         >
           Developer Tools
         </Button>
@@ -190,8 +201,8 @@ export function DebugPanel() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-50">
-      <Card className="p-4 shadow-lg w-80">
+    <div className="fixed bottom-4 right-4 z-[100]">
+      <Card className="p-4 shadow-lg w-80 border-2 border-primary-300">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Developer Debug Tools</h3>
           <Button 

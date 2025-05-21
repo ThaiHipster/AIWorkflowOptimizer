@@ -7,7 +7,6 @@ const SAMPLE_WORKFLOW_CONVERSATION = [
   "BCBA Hiring",
   "Clinic manager submits a requisition to the Recruiting Team",
   "It could be any of these. Let's just keep the requisition as the start of the workflow.",
-  "Clinic manager submits a requisition to the Recruiting Team",
   "The recruiting team will post the job description to Indeed and start collecting resumes. They will also begin to search LinkedIn for BCBAs in the area of the clinic and do cold outreach to those candidates.",
   "So far, the people involved are the clinic manager who submits their acquisition, the recruiting team member who does the search work, and there would also be a Regional Vice President who has approved this requisition.",
   "The recruiting team member will screen the candidates and do intro calls with any candidate that they think may be hireable. They will then pass on the top candidate to the clinic manager to schedule an in-person interview with the clinic manager.",
@@ -156,24 +155,39 @@ export class DebugTools {
         // Add to chat history for context
         chatHistory.push({ role: 'user', content: userMessage });
         
-        // Generate assistant response
-        const assistantResponse = await Claude.processMessage(chat.id, userMessage);
-        
-        // Save assistant message
-        await storage.createMessage({
-          chat_id: chat.id,
-          role: 'assistant',
-          content: assistantResponse
-        });
-        
-        // Add to chat history for context
-        chatHistory.push({ role: 'assistant', content: assistantResponse });
+        try {
+          // Generate assistant response
+          const assistantResponse = await Claude.processMessage(chat.id, userMessage);
+          
+          // Save assistant message
+          await storage.createMessage({
+            chat_id: chat.id,
+            role: 'assistant',
+            content: assistantResponse
+          });
+          
+          // Add to chat history for context
+          chatHistory.push({ role: 'assistant', content: assistantResponse });
+          
+          // Add a brief delay between messages to avoid deduplication errors
+          // Claude has a 10-second deduplication window
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          // If a specific message fails, log it but continue with the next messages
+          console.error(`Error processing message "${userMessage.substring(0, 30)}..." for chat ${chat.id}:`, error);
+          // Continue with the next message rather than failing the entire chat creation
+        }
       }
       
       // Generate title if we've added enough messages
       if (messageCount >= 3) {
-        const title = await Claude.generateChatTitle(chat.id);
-        console.log(`Generated title "${title}" for chat ${chat.id}`);
+        try {
+          const title = await Claude.generateChatTitle(chat.id);
+          console.log(`Generated title "${title}" for chat ${chat.id}`);
+        } catch (error) {
+          console.error(`Error generating title for chat ${chat.id}:`, error);
+          // Continue even if title generation fails
+        }
       }
       
       // Return the updated chat

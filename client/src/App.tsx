@@ -26,9 +26,9 @@ function App() {
       <AuthProvider>
         <ChatProvider>
           <Router />
-          <DebugPanel />
           <Toaster />
         </ChatProvider>
+        <DebugPanel />
       </AuthProvider>
     </QueryClientProvider>
   );
