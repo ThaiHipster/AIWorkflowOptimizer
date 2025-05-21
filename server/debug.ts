@@ -7,7 +7,6 @@ const SAMPLE_WORKFLOW_CONVERSATION = [
   "BCBA Hiring",
   "Clinic manager submits a requisition to the Recruiting Team",
   "It could be any of these. Let's just keep the requisition as the start of the workflow.",
-  "Clinic manager submits a requisition to the Recruiting Team",
   "The recruiting team will post the job description to Indeed and start collecting resumes. They will also begin to search LinkedIn for BCBAs in the area of the clinic and do cold outreach to those candidates.",
   "So far, the people involved are the clinic manager who submits their acquisition, the recruiting team member who does the search work, and there would also be a Regional Vice President who has approved this requisition.",
   "The recruiting team member will screen the candidates and do intro calls with any candidate that they think may be hireable. They will then pass on the top candidate to the clinic manager to schedule an in-person interview with the clinic manager.",
