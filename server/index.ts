@@ -1,7 +1,14 @@
-import 'dotenv/config'; // Load environment variables from .env file
+// Load environment variables from .env file
+import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+
+// Verify DATABASE_URL is loaded
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL environment variable is missing!");
+  console.error("Make sure your .env file is in the root directory and contains DATABASE_URL");
+}
 
 const app = express();
 app.use(express.json());
