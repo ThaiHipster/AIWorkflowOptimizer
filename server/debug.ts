@@ -155,24 +155,39 @@ export class DebugTools {
         // Add to chat history for context
         chatHistory.push({ role: 'user', content: userMessage });
         
-        // Generate assistant response
-        const assistantResponse = await Claude.processMessage(chat.id, userMessage);
-        
-        // Save assistant message
-        await storage.createMessage({
-          chat_id: chat.id,
-          role: 'assistant',
-          content: assistantResponse
-        });
-        
-        // Add to chat history for context
-        chatHistory.push({ role: 'assistant', content: assistantResponse });
+        try {
+          // Generate assistant response
+          const assistantResponse = await Claude.processMessage(chat.id, userMessage);
+          
+          // Save assistant message
+          await storage.createMessage({
+            chat_id: chat.id,
+            role: 'assistant',
+            content: assistantResponse
+          });
+          
+          // Add to chat history for context
+          chatHistory.push({ role: 'assistant', content: assistantResponse });
+          
+          // Add a brief delay between messages to avoid deduplication errors
+          // Claude has a 10-second deduplication window
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          // If a specific message fails, log it but continue with the next messages
+          console.error(`Error processing message "${userMessage.substring(0, 30)}..." for chat ${chat.id}:`, error);
+          // Continue with the next message rather than failing the entire chat creation
+        }
       }
       
       // Generate title if we've added enough messages
       if (messageCount >= 3) {
-        const title = await Claude.generateChatTitle(chat.id);
-        console.log(`Generated title "${title}" for chat ${chat.id}`);
+        try {
+          const title = await Claude.generateChatTitle(chat.id);
+          console.log(`Generated title "${title}" for chat ${chat.id}`);
+        } catch (error) {
+          console.error(`Error generating title for chat ${chat.id}:`, error);
+          // Continue even if title generation fails
+        }
       }
       
       // Return the updated chat
