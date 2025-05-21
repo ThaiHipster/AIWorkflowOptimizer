@@ -91,7 +91,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col z-40">
       <Header />
 
       <main className="flex-1 flex overflow-hidden">
@@ -225,6 +225,9 @@ export default function ChatPage() {
           )}
         </div>
       </main>
+      
+      {/* Add a spacer to ensure there's room for the debug panel */}
+      <div className="h-16"></div>
     </div>
   );
 }

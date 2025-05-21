@@ -70,7 +70,7 @@ An AI-powered workflow analysis and optimization platform that transforms comple
 
 6. Open your browser and navigate to `http://localhost:5000`
 
-## ⛠ Developer Tools
+## Debug Tools
 
 The application includes a Debug Panel that is only available when the `NODE_ENV` environment variable is not set to `production`. Running `npm run dev` will start the server in this mode and the panel appears in the bottom-right corner.
 
@@ -126,3 +126,25 @@ The application follows a client-server architecture with three main layers:
 - [shadcn/ui](https://ui.shadcn.com/) - UI component library
 - [TailwindCSS](https://tailwindcss.com/) - CSS framework
 - [Drizzle ORM](https://orm.drizzle.team/) - Database ORM
+
+## Features to add
+### Chat
+- [ ] Initiate a chat from the AI side
+- [ ] When you push enter after entering a message, then it should appear before the AI responds
+
+### Debug
+- [ ] The debug panel disappears when I start a chat
+- [ ] Phase management
+
+
+### Diagram
+
+### Users
+- [ ] Sign up and create a new user in the database that can then login
+
+### Asthetics
+- [ ] Add a loading state to the chat
+- [ ] Add a favicon to the website
+
+### Preperation for production
+- [ ] Enable a debug / non-debug option
