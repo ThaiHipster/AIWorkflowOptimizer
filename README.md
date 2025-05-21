@@ -126,3 +126,13 @@ The application follows a client-server architecture with three main layers:
 - [shadcn/ui](https://ui.shadcn.com/) - UI component library
 - [TailwindCSS](https://tailwindcss.com/) - CSS framework
 - [Drizzle ORM](https://orm.drizzle.team/) - Database ORM
+
+## Features to add
+### Chat
+- [ ] Initiate a chat from the AI side
+
+### Debug
+
+- [ ] Phase management
+
+### Diagram
