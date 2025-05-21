@@ -331,7 +331,7 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       // Create the message for Claude with comprehensive system prompt
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
-        max_tokens: 4000,
+        max_tokens: 20000,
         temperature: 0.7,
         system: this.WORKFLOW_DISCOVERY_SYSTEM,
         messages: typedMessages,
@@ -449,7 +449,7 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
     try {
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
-        max_tokens: 4000,
+        max_tokens: 20000,
         temperature: 0.2,
         system: this.DIAGRAM_GENERATION_SYSTEM,
         messages: [
@@ -579,7 +579,7 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       
       console.log(`Retrieved workflow JSON for chat ${chatId}`);
       
-      // Define the web search tool schema according to Anthropic's specifications
+      // Define the web search tool
       const tools = [
         {
           name: "web_search",
@@ -597,203 +597,130 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
         }
       ];
       
-      console.log(`Sending initial request to Claude for AI opportunity identification`);
-      
-      // First message setting up the context and the need to use the search tool
+      // Set up the initial prompt
       const initialPrompt = `Please analyze this workflow JSON to identify AI implementation opportunities. Use the web_search tool to find current industry examples and best practices for similar workflows.\n\n${JSON.stringify(chat.workflow_json, null, 2)}`;
       
-      // Create the initial message to Claude with proper tool configuration and Extended Thinking Mode
+      console.log(`Sending initial request to Claude for AI opportunity identification`);
+      
+      // Create the initial message to Claude without using extended thinking
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
         max_tokens: 4000,
-        temperature: 0.0,
+        temperature: 0.7,
         system: this.AI_OPPORTUNITIES_SYSTEM,
         messages: [{ role: 'user', content: initialPrompt }],
         tools,
-        tool_choice: { type: "auto" },
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 10000 // Allocate 10000 tokens for Claude's internal reasoning
-        }
+        tool_choice: { type: "auto" }
       });
       
       console.log(`Received initial response from Claude`);
       
-      // Process the conversation with tool calls
+      // Initialize tracking variables
       let finalResponse = response;
-      let needsMoreSearches = false;
       let toolCallCount = 0;
-      const maxToolCalls = 5; // Limit the number of search calls to prevent excess usage
+      const maxToolCalls = 5; // Limit number of searches
       
-      // Initialize conversation history
-      // TypeScript interfaces for message types
-      type UserMessage = { role: 'user', content: string };
-      type AssistantMessage = typeof response;
-      type ToolMessage = { role: 'tool', tool_call_id: string, name: string, content: string };
-      
-      // Create a type-safe conversation array
-      let conversation: (UserMessage | AssistantMessage | ToolMessage)[] = [
-        { role: 'user', content: initialPrompt },
-        response
+      // Initialize message history with user and assistant messages
+      // We'll use proper Anthropic SDK types for messages
+      const messageHistory: MessageParam[] = [
+        { role: 'user', content: initialPrompt }
       ];
       
-      // Check if there are any tool calls in the initial response
-      if (response.content && Array.isArray(response.content)) {
-        // Look for tool_use blocks in the content
-        const hasToolUse = response.content.some(block => 
-          typeof block === 'object' && 
-          block !== null && 
-          'type' in block && 
-          block.type === 'tool_use'
-        );
-        
-        needsMoreSearches = hasToolUse;
-      }
+      let currentResponse = response;
+      let hasMoreToolCalls = this.hasToolUse(currentResponse);
       
-      console.log(`Initial response has tool calls: ${needsMoreSearches}`);
-      
-      // Handle tool calls in a loop until we get a final answer or reach max calls
-      while (needsMoreSearches && toolCallCount < maxToolCalls) {
+      // Process tool calls in a loop
+      while (hasMoreToolCalls && toolCallCount < maxToolCalls) {
         console.log(`Processing tool calls, iteration ${toolCallCount + 1}`);
         
-        // Get the most recent response
-        const lastMessage = conversation[conversation.length - 1];
+        // Extract the tool calls from the response
+        const toolCalls = this.extractToolCalls(currentResponse);
         
-        // Check if it's an assistant message with tool calls
-        if ('role' in lastMessage && lastMessage.role === 'assistant' && lastMessage.content) {
-          // Look for tool_use blocks in the content
-          const toolUseBlocks = lastMessage.content.filter(block => 
-            typeof block === 'object' && 
-            block !== null && 
-            'type' in block && 
-            block.type === 'tool_use'
-          );
+        if (toolCalls.length === 0) {
+          break;
+        }
+        
+        // Process each tool call and collect results
+        const toolResults = [];
+        
+        for (const toolCall of toolCalls) {
+          toolCallCount++;
+          console.log(`Processing tool call ${toolCallCount}: ${toolCall.name}`);
           
-          if (toolUseBlocks.length > 0) {
-            // Process each tool call
-            const toolResponses: ToolMessage[] = [];
-            
-            for (const block of toolUseBlocks) {
-              if ('type' in block && block.type === 'tool_use' && 'id' in block && 'name' in block && 'input' in block) {
-                toolCallCount++;
-                console.log(`Processing tool call ${toolCallCount}: ${block.name}`);
-                
-                if (block.name === 'web_search') {
-                  try {
-                    // Extract the search query
-                    const input = typeof block.input === 'string' ? JSON.parse(block.input) : block.input;
-                    const query = input.query;
-                    
-                    console.log(`Performing web search for query: "${query}"`);
-                    
-                    // Perform the web search
-                    const searchResults = await webSearch.search(query);
-                    
-                    console.log(`Received ${searchResults.results.length} search results`);
-                    
-                    // Add the tool response
-                    toolResponses.push({
-                      role: 'tool',
-                      tool_call_id: block.id,
-                      name: 'web_search',
-                      content: JSON.stringify(searchResults)
-                    });
-                    
-                  } catch (error) {
-                    console.error('Error processing web search:', error);
-                    
-                    // Return empty results on error
-                    toolResponses.push({
-                      role: 'tool',
-                      tool_call_id: block.id,
-                      name: 'web_search',
-                      content: JSON.stringify({ 
-                        results: [{
-                          title: "Error performing web search",
-                          link: "https://example.com",
-                          snippet: "An error occurred while performing the web search. The search service may be unavailable or the API key may be invalid."
-                        }] 
-                      })
-                    });
-                  }
-                }
-              }
-            }
-            
-            if (toolResponses.length > 0) {
-              console.log(`Adding ${toolResponses.length} tool responses to the conversation`);
+          if (toolCall.name === 'web_search') {
+            try {
+              // Get the query from the tool call
+              const input = typeof toolCall.input === 'string' 
+                ? JSON.parse(toolCall.input) 
+                : toolCall.input;
               
-              // Add tool responses to the conversation
-              // TypeScript requires us to manually add these as they have a different type
-              for (const resp of toolResponses) {
-                conversation.push(resp);
-              }
+              const query = input.query;
+              console.log(`Performing web search for query: "${query}"`);
               
-              // Continue the conversation with the tool responses
-              console.log('Sending follow-up request to Claude with tool responses');
+              // Execute the search
+              const searchResults = await webSearch.search(query);
+              console.log(`Received ${searchResults.results.length} search results`);
               
-              // Convert the conversation to the format expected by Claude
-              const messages = conversation.map(msg => {
-                if (msg.role === 'user') {
-                  return { role: 'user', content: msg.content };
-                } else if (msg.role === 'tool') {
-                  return { 
-                    role: 'tool', 
-                    tool_call_id: msg.tool_call_id, 
-                    name: msg.name, 
-                    content: msg.content 
-                  };
-                } else {
-                  // For assistant messages, we need to include the entire message object
-                  return msg;
-                }
+              // Add the tool result
+              toolResults.push({
+                type: 'tool_result' as const,
+                tool_use_id: toolCall.id,
+                content: JSON.stringify(searchResults)
               });
               
-              // Send the follow-up request with Extended Thinking Mode
-              finalResponse = await anthropic.messages.create({
-                model: MODEL_NAME,
-                max_tokens: 4000,
-                temperature: 0.7,
-                system: this.AI_OPPORTUNITIES_SYSTEM,
-                messages: messages,
-                tools,
-                tool_choice: { type: "auto" },
-                thinking: { 
-                  type: 'enabled',
-                  budget_tokens: 2000 // Allocate 2000 tokens for Claude's internal reasoning
-                }
+            } catch (error) {
+              console.error('Error processing web search:', error);
+              
+              // Add an error result
+              toolResults.push({
+                type: 'tool_result' as const,
+                tool_use_id: toolCall.id,
+                content: JSON.stringify({ 
+                  results: [{
+                    title: "Error performing web search",
+                    link: "https://example.com",
+                    snippet: "An error occurred while performing the web search. The service may be unavailable."
+                  }]
+                })
               });
-              
-              console.log('Received follow-up response from Claude');
-              
-              // Add the assistant's response to the conversation
-              conversation.push(finalResponse);
-              
-              // Check if there are more tool calls in the new response
-              if (finalResponse.content && Array.isArray(finalResponse.content)) {
-                const hasMoreToolUse = finalResponse.content.some(block => 
-                  typeof block === 'object' && 
-                  block !== null && 
-                  'type' in block && 
-                  block.type === 'tool_use'
-                );
-                
-                needsMoreSearches = hasMoreToolUse;
-                console.log(`Response contains more tool calls: ${needsMoreSearches}`);
-              } else {
-                needsMoreSearches = false;
-              }
-            } else {
-              // No tool responses were added, so we're done
-              needsMoreSearches = false;
             }
-          } else {
-            // No tool use blocks found
-            needsMoreSearches = false;
           }
+        }
+        
+        if (toolResults.length > 0) {
+          // Add the assistant's message to history
+          messageHistory.push({ 
+            role: 'assistant', 
+            content: currentResponse.content 
+          });
+          
+          // Add tool results as a user message
+          messageHistory.push({ 
+            role: 'user', 
+            content: toolResults 
+          });
+          
+          console.log('Sending follow-up request to Claude with tool results');
+          
+          // Send the follow-up request
+          currentResponse = await anthropic.messages.create({
+            model: MODEL_NAME,
+            max_tokens: 4000,
+            temperature: 0.7,
+            system: this.AI_OPPORTUNITIES_SYSTEM,
+            messages: messageHistory,
+            tools,
+            tool_choice: { type: "auto" }
+          });
+          
+          console.log('Received follow-up response from Claude');
+          finalResponse = currentResponse;
+          
+          // Check if there are more tool calls
+          hasMoreToolCalls = this.hasToolUse(currentResponse);
         } else {
-          // Not an assistant message or no content
-          needsMoreSearches = false;
+          // No successful tool results, so end the loop
+          hasMoreToolCalls = false;
         }
       }
       
@@ -802,7 +729,7 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       // Extract the final text content
       let aiSuggestions = '';
       
-      if (finalResponse.content && finalResponse.content.length > 0) {
+      if (finalResponse.content && Array.isArray(finalResponse.content)) {
         // Get all text blocks from the final response
         const textBlocks = finalResponse.content.filter(block => 
           typeof block === 'object' && 
@@ -837,12 +764,51 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
       throw error;
     }
   }
+  
+  // Helper method to check if a response contains tool use blocks
+  private static hasToolUse(response: Message): boolean {
+    if (response.content && Array.isArray(response.content)) {
+      return response.content.some(block => 
+        typeof block === 'object' && 
+        block !== null && 
+        'type' in block && 
+        block.type === 'tool_use'
+      );
+    }
+    return false;
+  }
+  
+  // Helper method to extract tool call information from a response
+  private static extractToolCalls(response: Message): Array<{id: string, name: string, input: any}> {
+    if (!response.content || !Array.isArray(response.content)) {
+      return [];
+    }
+    
+    const toolUseBlocks = response.content.filter(block => 
+      typeof block === 'object' && 
+      block !== null && 
+      'type' in block && 
+      block.type === 'tool_use'
+    );
+    
+    return toolUseBlocks.map(block => {
+      if ('id' in block && 'name' in block && 'input' in block) {
+        return {
+          id: block.id as string,
+          name: block.name as string,
+          input: block.input
+        };
+      }
+      return null;
+    }).filter(Boolean) as Array<{id: string, name: string, input: any}>;
+  }
 
   // Create implementation prompt for a specific opportunity
   public static async createImplementationPrompt(description: string): Promise<string> {
     try {
       console.log(`Creating implementation prompt for: ${description.substring(0, 100)}...`);
       
+      // Using standard settings without extended thinking
       const response = await anthropic.messages.create({
         model: MODEL_NAME,
         max_tokens: 2000,
@@ -853,16 +819,24 @@ Now, based on the \`Opportunity Description\` you will receive, generate the imp
             role: 'user', 
             content: `Create a detailed implementation prompt for this AI opportunity: ${description}` 
           }
-        ],
+        ]
       });
       
       // Safely extract text from content
       let prompt = "Unable to generate prompt. Please try again with a more detailed description.";
       
-      if (response.content && response.content.length > 0) {
-        const firstBlock = response.content[0];
-        if (firstBlock.type === 'text') {
-          prompt = firstBlock.text;
+      if (response.content && Array.isArray(response.content) && response.content.length > 0) {
+        // Get the first text block
+        const textBlocks = response.content.filter(block => 
+          typeof block === 'object' && 
+          block !== null && 
+          'type' in block && 
+          block.type === 'text' && 
+          'text' in block
+        );
+        
+        if (textBlocks.length > 0 && 'text' in textBlocks[0]) {
+          prompt = textBlocks[0].text;
           console.log(`Generated implementation prompt of length ${prompt.length}`);
         }
       }
